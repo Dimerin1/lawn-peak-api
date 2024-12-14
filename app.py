@@ -15,7 +15,10 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["https://fabulous-screenshot-716470.framer.app"],
+        "origins": [
+            "https://fabulous-screenshot-716470.framer.app",
+            "http://localhost:3000"
+        ],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Accept", "Origin"],
         "supports_credentials": True
