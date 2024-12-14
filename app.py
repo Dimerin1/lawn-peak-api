@@ -13,7 +13,14 @@ from google.oauth2 import service_account
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["https://fabulous-screenshot-716470.framer.app"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Accept", "Origin"],
+        "supports_credentials": True
+    }
+})
 
 # Initialize Stripe
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
@@ -85,6 +92,89 @@ def capture_payment(payment_intent_id):
     try:
         intent = stripe.PaymentIntent.capture(payment_intent_id)
         return jsonify({'status': intent.status})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/lot-size', methods=['POST'])
+def get_lot_size_endpoint():
+    try:
+        data = request.json
+        address = data.get('address')
+        
+        if not address:
+            return jsonify({'error': 'Address is required'}), 400
+
+        # Get lot size using existing function
+        lot_size = get_lot_size(address)
+        
+        if not lot_size:
+            return jsonify({'error': 'Could not determine lot size'}), 400
+
+        return jsonify({
+            'lot_size': lot_size,
+            'address': address
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/calculate-price', methods=['POST'])
+def calculate_price_endpoint():
+    try:
+        data = request.json
+        lot_size = data.get('lot_size')
+        service = data.get('service')
+        
+        if not lot_size:
+            return jsonify({'error': 'Lot size is required'}), 400
+
+        # Calculate base price
+        price = calculate_price(lot_size)
+        
+        # Apply service discount
+        if service == 'weekly':
+            price = round(price * 0.9)  # 10% discount
+        elif service == 'biweekly':
+            price = round(price * 0.95)  # 5% discount
+
+        return jsonify({
+            'price': price,
+            'service': service
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/create-payment', methods=['POST'])
+def create_payment_endpoint():
+    try:
+        data = request.json
+        amount = data.get('amount')
+        customer = data.get('customer', {})
+        service = data.get('service')
+        
+        if not amount:
+            return jsonify({'error': 'Amount is required'}), 400
+
+        # Create a PaymentIntent with the order amount and currency
+        intent = stripe.PaymentIntent.create(
+            amount=int(amount * 100),  # Convert to cents
+            currency='usd',
+            capture_method='manual',  # This enables the pre-authorization flow
+            metadata={
+                'service': service,
+                'address': customer.get('address', ''),
+                'name': customer.get('name', ''),
+                'email': customer.get('email', ''),
+                'phone': customer.get('phone', '')
+            }
+        )
+
+        return jsonify({
+            'clientSecret': intent.client_secret,
+            'id': intent.id
+        })
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

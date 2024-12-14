@@ -39,17 +39,17 @@ A complete solution for integrating address-based quotes and Stripe payment proc
 - Input: Final quote amount
 - Output: Stripe PaymentIntent object
 - Purpose: Pre-authorize payment card
-- Status: ✅ Implemented
+- Status: 
 
 ### `capturePayment(paymentIntentId: string)`
 - Input: PaymentIntent ID
 - Output: Payment confirmation
 - Purpose: Complete the payment after job completion
-- Status: ✅ Implemented
+- Status: 
 
 ## API Keys Required
 - Google Geocoding API
-- ✅ Stripe API
+- Stripe API
 - Google Sheets API
 
 ## Tech Stack
@@ -58,15 +58,92 @@ A complete solution for integrating address-based quotes and Stripe payment proc
 - Payment Processing: Stripe
 - Data Storage: Google Sheets
 
+## Framer-API Integration
+
+### User Flow & API Integration Points
+
+#### Step 1: Customer Information
+- Collect customer name
+- Store in Framer state for next steps
+- No API call required
+
+#### Step 2: Contact & Address
+- Collect: phone, email, address
+- API Endpoint: `POST /api/lot-size`
+  ```json
+  {
+    "address": "string",
+    "name": "string",
+    "email": "string",
+    "phone": "string"
+  }
+  ```
+- Response: `{ "lot_size": number }`
+- Error Handling: Invalid address, API timeout
+
+#### Step 3: Service Selection
+- Display service dropdown
+- API Endpoint: `POST /api/calculate-price`
+  ```json
+  {
+    "lot_size": number,
+    "service": string
+  }
+  ```
+- Response: `{ "price": number }`
+
+#### Step 4: Payment Processing
+- API Endpoint: `POST /api/create-payment`
+  ```json
+  {
+    "amount": number,
+    "customer": {
+      "name": "string",
+      "email": "string",
+      "phone": "string",
+      "address": "string"
+    },
+    "service": "string"
+  }
+  ```
+- Response: `{ "clientSecret": string }`
+- Implement Stripe Elements for secure payment
+- Success/failure handling and Google Sheets update
+
+### API Error Handling
+- Network timeout: Retry with exponential backoff
+- Invalid input: Clear validation messages
+- API errors: User-friendly error messages
+- Payment failures: Detailed error feedback
+
+### Loading States
+- Address validation: "Calculating lot size..."
+- Price calculation: "Calculating quote..."
+- Payment processing: "Processing payment..."
+
+### Data Flow
+1. Store user inputs in Framer state
+2. Pass complete data object between steps
+3. Validate all required fields before API calls
+4. Maintain error state for proper user feedback
+
+## Deployment
+- [x] Backend API deployed on Render (lawn-peak-api)
+- [ ] Framer site configuration
+  - Add API endpoint URLs
+  - Configure CORS settings
+  - Set up error handling
+- [x] SSL certificate
+- [ ] Domain configuration
+- [ ] End-to-end testing
+  - Address validation flow
+  - Price calculation accuracy
+  - Payment processing
+  - Google Sheets integration
+
 ## Testing Instructions
 - [x] Local environment setup
 - [x] API key configuration
 - [x] Test address validation
 - [x] Test price calculation
 - [ ] Test payment flow
-
-## Deployment
-- [ ] Environment setup
-- [ ] API configuration
-- [ ] SSL certificate
-- [ ] Domain configuration
