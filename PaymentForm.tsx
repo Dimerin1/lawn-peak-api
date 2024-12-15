@@ -19,7 +19,7 @@ const getStripe = async () => {
     return loadStripe('pk_test_51ONqUHFIWJQKnfxXBSWTlcKRGpvhBWRtQnxQxBTqVPxAYF3IkXlPHbOJBHQIxULhsqOQRXhTPTz8F8UbNrE7KtGD00yrTDUQbR');
 };
 
-export function PaymentForm({ onSuccess, onBack }: PaymentFormProps) {
+function PaymentForm({ onSuccess, onBack }: PaymentFormProps) {
     const [isProcessing, setIsProcessing] = React.useState(false);
     const [error, setError] = React.useState("");
     const [paymentSuccess, setPaymentSuccess] = React.useState(false);
@@ -226,6 +226,8 @@ export function PaymentForm({ onSuccess, onBack }: PaymentFormProps) {
     );
 }
 
+PaymentForm.displayName = "Form"
+
 addPropertyControls(PaymentForm, {
     onSuccess: {
         type: ControlType.EventHandler,
@@ -233,4 +235,6 @@ addPropertyControls(PaymentForm, {
     onBack: {
         type: ControlType.EventHandler,
     },
-});
+})
+
+export default PaymentForm
