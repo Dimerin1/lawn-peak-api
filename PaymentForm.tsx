@@ -8,7 +8,7 @@ interface PaymentFormProps {
 
 declare global {
     interface Window {
-        Stripe: any;
+        Stripe?: any;
     }
 }
 
@@ -25,6 +25,8 @@ export function PaymentForm({ onSuccess, onBack }: PaymentFormProps) {
     const [card, setCard] = React.useState<any>(null);
     const [paymentSuccess, setPaymentSuccess] = React.useState(false);
     const [isLoading, setIsLoading] = React.useState(true);
+    const [stripe, setStripe] = React.useState<any>(null);
+    const [elements, setElements] = React.useState<any>(null);
     const [quoteData, setQuoteData] = React.useState<{
         price: number;
         service_type: string;
@@ -34,17 +36,34 @@ export function PaymentForm({ onSuccess, onBack }: PaymentFormProps) {
     } | null>(null);
     const cardElementRef = React.useRef<HTMLDivElement>(null);
 
-    // Initialize Stripe
+    // Load Stripe
     React.useEffect(() => {
-        if (!cardElementRef.current || !window.Stripe) {
-            console.error('Stripe not loaded or cardElementRef not ready');
-            return;
-        }
+        const loadStripe = async () => {
+            try {
+                if (!window.Stripe) {
+                    console.error('Stripe.js not loaded');
+                    setError('Payment system not loaded. Please refresh the page.');
+                    return;
+                }
+                
+                const stripeInstance = window.Stripe('pk_test_51ONqUHFIWJQKnfxXBSWTlcKRGpvhBWRtQnxQxBTqVPxAYF3IkXlPHbOJBHQIxULhsqOQRXhTPTz8F8UbNrE7KtGD00yrTDUQbR');
+                setStripe(stripeInstance);
+                const elementsInstance = stripeInstance.elements();
+                setElements(elementsInstance);
+            } catch (err) {
+                console.error('Error loading Stripe:', err);
+                setError('Failed to initialize payment system');
+            }
+        };
+        
+        loadStripe();
+    }, []);
+
+    // Initialize Card Element
+    React.useEffect(() => {
+        if (!elements || !cardElementRef.current) return;
 
         try {
-            const stripe = window.Stripe('pk_test_51ONqUHFIWJQKnfxXBSWTlcKRGpvhBWRtQnxQxBTqVPxAYF3IkXlPHbOJBHQIxULhsqOQRXhTPTz8F8UbNrE7KtGD00yrTDUQbR');
-            const elements = stripe.elements();
-            
             const cardElement = elements.create('card', {
                 style: {
                     base: {
@@ -79,10 +98,10 @@ export function PaymentForm({ onSuccess, onBack }: PaymentFormProps) {
                 cardElement.unmount();
             };
         } catch (err) {
-            console.error('Error initializing Stripe:', err);
-            setError('Failed to initialize payment system');
+            console.error('Error initializing card element:', err);
+            setError('Failed to initialize card input');
         }
-    }, [cardElementRef.current]);
+    }, [elements, cardElementRef.current]);
 
     // Load quote data
     React.useEffect(() => {
@@ -103,14 +122,12 @@ export function PaymentForm({ onSuccess, onBack }: PaymentFormProps) {
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
-        if (!window.Stripe || !card || !cardComplete || !quoteData) return;
+        if (!stripe || !card || !cardComplete || !quoteData) return;
 
         setIsProcessing(true);
         setError("");
 
         try {
-            const stripe = window.Stripe('pk_test_51ONqUHFIWJQKnfxXBSWTlcKRGpvhBWRtQnxQxBTqVPxAYF3IkXlPHbOJBHQIxULhsqOQRXhTPTz8F8UbNrE7KtGD00yrTDUQbR');
-            
             // Create payment intent
             const response = await fetch('https://lawn-peak.onrender.com/create-payment-intent', {
                 method: 'POST',
