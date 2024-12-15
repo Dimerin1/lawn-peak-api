@@ -33,28 +33,24 @@ def home():
 
 @app.route('/api/quote', methods=['POST'])
 def get_quote():
+    data = request.get_json()
+    address = data.get('address')
+    service_type = data.get('service_type', 'ONE_TIME')
+    
     try:
-        data = request.json
-        address = data.get('address')
-        
-        if not address:
-            return jsonify({'error': 'Address is required'}), 400
-
-        # Get lot size from Google Maps API
+        # Get lot size range instead of exact size
         lot_size = get_lot_size(address)
-        
-        if not lot_size:
+        if lot_size is None:
             return jsonify({'error': 'Could not determine lot size'}), 400
-
-        # Calculate price
-        price = calculate_price(lot_size)
+            
+        lot_size_range = get_lot_size_range(lot_size)
+        price = calculate_price(lot_size_range, service_type)
         
         return jsonify({
-            'lot_size': lot_size,
-            'price': price,
-            'address': address
+            'address': address,
+            'lot_size_range': lot_size_range,
+            'price': price
         })
-
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -139,7 +135,7 @@ def calculate_price_endpoint():
             return jsonify({'error': 'Service type is required'}), 400
 
         # Calculate base price
-        price = calculate_price(lot_size)
+        price = calculate_price(get_lot_size_range(lot_size), service.upper())
         print(f"Base price for {lot_size} sq ft: ${price}")  # Debug log
         
         # Apply service discount based on keywords
@@ -200,7 +196,7 @@ def create_payment_endpoint():
 def get_lot_size(address):
     api_key = os.getenv('GOOGLE_MAPS_API_KEY')
     
-    # Get coordinates from address
+    # Get coordinates and bounds from address
     geocoding_url = f'https://maps.googleapis.com/maps/api/geocode/json?address={address}&key={api_key}'
     response = requests.get(geocoding_url)
     result = response.json()
@@ -208,22 +204,19 @@ def get_lot_size(address):
     if result['status'] != 'OK':
         return None
         
-    location = result['results'][0]['geometry']['location']
-    lat = location['lat']
-    lng = location['lng']
-    
-    # Get place details to find the property area
-    place_url = f'https://maps.googleapis.com/maps/api/place/details/json?place_id={result["results"][0]["place_id"]}&fields=geometry&key={api_key}'
-    place_response = requests.get(place_url)
-    place_result = place_response.json()
-    
-    if place_result['status'] != 'OK':
-        return None
-    
-    # Calculate approximate lot size from viewport
-    viewport = place_result['result']['geometry']['viewport']
-    ne = viewport['northeast']
-    sw = viewport['southwest']
+    # Try to get the property bounds first
+    geometry = result['results'][0]['geometry']
+    if 'bounds' in geometry:
+        bounds = geometry['bounds']
+    else:
+        # If bounds not available, use location and create a small buffer
+        location = geometry['location']
+        lat_buffer = 0.0001  # Roughly 11 meters
+        lng_buffer = 0.0001
+        bounds = {
+            'northeast': {'lat': location['lat'] + lat_buffer, 'lng': location['lng'] + lng_buffer},
+            'southwest': {'lat': location['lat'] - lat_buffer, 'lng': location['lng'] - lng_buffer}
+        }
     
     # Calculate width and height in meters
     from math import radians, cos, sin, asin, sqrt
@@ -239,30 +232,58 @@ def get_lot_size(address):
         c = 2 * asin(sqrt(a))
         return R * c
     
+    ne = bounds['northeast']
+    sw = bounds['southwest']
+    
     width = haversine(ne['lat'], sw['lng'], ne['lat'], ne['lng'])
     height = haversine(ne['lat'], sw['lng'], sw['lat'], sw['lng'])
     
-    # Convert square meters to square feet and apply a residential factor
-    # Viewport is usually much larger than the actual property
-    lot_size = (width * height * 10.764) * 0.15  # 15% of viewport area
+    # Convert square meters to square feet
+    # For residential properties, we'll use 40% of the bounds area
+    # since bounds are usually closer to actual property size
+    lot_size = (width * height * 10.764) * 0.4
     
-    # Apply some reasonable constraints for residential properties
-    min_size = 1000  # Minimum lot size in sq ft
-    max_size = 20000  # Maximum lot size in sq ft (about half acre)
+    # Apply typical lot size constraints for suburban properties
+    min_size = 4000   # Typical minimum suburban lot
+    max_size = 12000  # Typical maximum suburban lot
     
-    return max(min(round(lot_size), max_size), min_size)
+    # Adjust for location-specific averages
+    if 'FL' in address or 'Florida' in address:
+        # Florida suburban lots typically range from 5,000 to 10,000 sq ft
+        lot_size = min(max(lot_size, 5000), 10000)
+    
+    return round(lot_size)
 
-def calculate_price(lot_size):
-    # Base price calculation
-    base_price = lot_size * 0.003843
+def get_lot_size_range(lot_size):
+    if lot_size < 5000:
+        return 'SMALL'
+    elif lot_size < 9000:
+        return 'MEDIUM'
+    elif lot_size < 11000:
+        return 'LARGE'
+    else:
+        return 'XLARGE'
+
+def calculate_price(lot_size_range, service_type='ONE_TIME'):
+    # Base prices (one-time service)
+    base_prices = {
+        'SMALL': 65,     # $30 cost → Bi-weekly: $55, One-time: $65
+        'MEDIUM': 70,    # $35 cost → Bi-weekly: $60, One-time: $70
+        'LARGE': 80,     # $40 cost → Bi-weekly: $65, One-time: $80
+        'XLARGE': 90,    # $45 cost → Bi-weekly: $75, One-time: $90
+    }
     
-    # Apply minimum price
-    base_price = max(base_price, 30)
+    # Service type discounts
+    discounts = {
+        'ONE_TIME': 1.0,      # No discount
+        'MONTHLY': 1.0,       # No discount
+        'BI_WEEKLY': 0.85,    # 15% discount
+        'WEEKLY': 0.75        # 25% discount
+    }
     
-    # Apply margin
-    final_price = base_price * 1.70
+    base_price = base_prices[lot_size_range]
+    final_price = base_price * discounts[service_type]
     
-    # Round to nearest whole number
     return round(final_price)
 
 if __name__ == '__main__':

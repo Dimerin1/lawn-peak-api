@@ -9,6 +9,20 @@ const SERVICES = {
     monthly: { name: "Monthly mowing", discount: 0 }
 }
 
+const lotSizeRanges = {
+    'SMALL': 'Small (up to 5,000 sq ft)',
+    'MEDIUM': 'Medium (5,000 - 10,000 sq ft)',
+    'LARGE': 'Large (10,000 - 15,000 sq ft)',
+    'XLARGE': 'Extra Large (over 15,000 sq ft)'
+};
+
+const serviceTypes = [
+    { value: 'ONE_TIME', label: 'One-time mowing' },
+    { value: 'MONTHLY', label: 'Monthly mowing' },
+    { value: 'BI_WEEKLY', label: 'Bi-weekly mowing (Save 15%)' },
+    { value: 'WEEKLY', label: 'Weekly mowing (Save 25%)' }
+];
+
 function QuoteCalculator() {
     const [formData, setFormData] = React.useState({
         address: "",
@@ -134,6 +148,16 @@ function QuoteCalculator() {
         }
     }
 
+    const handleQuoteResponse = (data: any) => {
+        setFormData(prev => ({
+            ...prev,
+            price: data.price,
+            lotSizeRange: lotSizeRanges[data.lot_size_range],
+            address: data.address
+        }));
+        setIsLoading(false);
+    };
+
     return (
         <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "16px" }}>
             <AddressInput 
@@ -175,6 +199,16 @@ function QuoteCalculator() {
                     padding: "16px"
                 }}>
                     {priceDisplay}
+                </div>
+            )}
+            {formData.lotSizeRange && (
+                <div style={{ 
+                    fontSize: "18px", 
+                    fontWeight: "bold",
+                    textAlign: "center",
+                    padding: "16px"
+                }}>
+                    Lot Size Range: {formData.lotSizeRange}
                 </div>
             )}
         </div>
