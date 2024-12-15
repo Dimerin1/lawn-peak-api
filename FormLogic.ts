@@ -16,7 +16,7 @@ const formData = {
 // Step 1: Name Input
 export function withNameInput(): Override {
     return {
-        onChange: (event) => {
+        onChange: event => {
             formData.name = event.target.value
             console.log("Name:", formData.name)
         },
@@ -26,7 +26,7 @@ export function withNameInput(): Override {
 // Step 2: Contact & Address Inputs
 export function withPhoneInput(): Override {
     return {
-        onChange: (event) => {
+        onChange: event => {
             formData.phone = event.target.value
             console.log("Phone:", formData.phone)
         },
@@ -35,7 +35,7 @@ export function withPhoneInput(): Override {
 
 export function withEmailInput(): Override {
     return {
-        onChange: (event) => {
+        onChange: event => {
             formData.email = event.target.value
             console.log("Email:", formData.email)
         },
@@ -44,7 +44,7 @@ export function withEmailInput(): Override {
 
 export function withAddressInput(): Override {
     return {
-        onPlaceSelect: async (place) => {
+        onPlaceSelect: async place => {
             formData.address = place.address
             console.log("Address:", formData.address)
             
@@ -82,7 +82,7 @@ export function withAddressInput(): Override {
 // Step 3: Service Selection
 export function withServiceSelect(): Override {
     return {
-        onChange: async (event) => {
+        onChange: async event => {
             const selectedService = event.target.value
             formData.service = selectedService
             console.log("Service selected:", selectedService)
@@ -92,16 +92,6 @@ export function withServiceSelect(): Override {
                 if (!formData.lotSize) {
                     console.error("Lot size is missing")
                     throw new Error("Please enter your address first to calculate the lot size")
-                }
-
-                // Validate service type
-                const validServices = [
-                    'Lawn mowing (one time)',
-                    'Lawn mowing (weekly)',
-                    'Lawn mowing (biweekly)'
-                ]
-                if (!validServices.includes(selectedService)) {
-                    throw new Error(`Invalid service type. Expected one of: ${validServices.join(', ')}`)
                 }
 
                 const requestBody = {
@@ -152,9 +142,7 @@ export function withNextButton(): Override {
     return {
         onClick: async () => {
             const form = document.querySelector("[data-framer-name='Form']")
-            const currentStep = parseInt(
-                form?.getAttribute("data-framer-component-active-variant") || "1"
-            )
+            const currentStep = parseInt(form?.getAttribute("data-framer-component-active-variant") || "1")
 
             // Validate current step
             if (!validateStep(currentStep)) {
@@ -171,29 +159,24 @@ export function withNextButton(): Override {
                             "Accept": "application/json",
                             "Origin": "https://fabulous-screenshot-716470.framer.app"
                         },
-                        mode: "cors",
-                        credentials: "include",
                         body: JSON.stringify({
                             amount: formData.price,
                             customer: {
                                 name: formData.name,
                                 email: formData.email,
                                 phone: formData.phone,
-                                address: formData.address,
+                                address: formData.address
                             },
-                            service: formData.service,
-                        }),
+                            service: formData.service
+                        })
                     })
 
                     if (!response.ok) {
-                        console.error("Server response:", await response.text())
-                        throw new Error(`Failed to create payment: ${response.status}`)
+                        const errorText = await response.text()
+                        throw new Error(`Failed to create payment: ${errorText}`)
                     }
 
                     const { clientSecret } = await response.json()
-                    
-                    // Initialize Stripe payment here if needed
-                    // This would depend on your Stripe implementation
                     console.log("Payment initiated with client secret:", clientSecret)
                 } catch (error) {
                     console.error("Error creating payment:", error)
@@ -220,7 +203,7 @@ function validateStep(step: number): boolean {
 // Optional: Add loading state overrides
 export function withLoadingIndicator(): Override {
     return {
-        visible: false, // You can control this based on API calls
+        visible: false,
     }
 }
 
@@ -228,6 +211,6 @@ export function withLoadingIndicator(): Override {
 export function withErrorMessage(): Override {
     return {
         visible: false,
-        text: "", // You can update this with specific error messages
+        text: "",
     }
 }
