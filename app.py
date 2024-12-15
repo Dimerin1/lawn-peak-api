@@ -347,5 +347,4 @@ def calculate_price(lot_size_range, service_type='ONE_TIME'):
     return round(final_price)
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=5000)
