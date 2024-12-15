@@ -213,7 +213,8 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
             localStorage.setItem('lawn_peak_customer_id', data.customerId)
             
             // Redirect to Stripe's hosted payment method setup page
-            window.location.href = `https://checkout.stripe.com/setup/${data.clientSecret}`
+            const setupUrl = `https://dashboard.stripe.com/setup/${data.clientSecret}`
+            window.location.href = setupUrl
         } catch (err) {
             console.error('Payment setup error:', err)
             setPaymentError(err.message || 'Failed to set up payment method. Please try again.')
