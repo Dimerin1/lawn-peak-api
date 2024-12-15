@@ -18,7 +18,8 @@ function PaymentForm({ price, service_type, address, lot_size, phone }: PaymentF
         setError("")
         
         try {
-            const response = await fetch('https://lawn-peak-api.onrender.com/create-checkout-session', {
+            // First create a setup intent on the backend
+            const response = await fetch('https://lawn-peak-api.onrender.com/create-setup-intent', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -29,28 +30,23 @@ function PaymentForm({ price, service_type, address, lot_size, phone }: PaymentF
                     address: address,
                     lot_size: lot_size,
                     phone: phone,
-                    success_url: window.location.origin + '/success',
-                    cancel_url: window.location.origin + '/cancel'
+                    return_url: window.location.origin + '/dashboard'
                 })
             })
 
             if (!response.ok) {
                 const errorData = await response.json()
-                throw new Error(errorData.error || 'Failed to create checkout session')
+                throw new Error(errorData.error || 'Failed to create setup intent')
             }
 
-            const data = await response.json()
+            const { setupIntentUrl } = await response.json()
             
-            if (data.url) {
-                window.location.href = data.url // Redirect in same window
-            } else if (data.sessionId) {
-                window.location.href = `https://checkout.stripe.com/pay/${data.sessionId}`
-            } else {
-                throw new Error('No checkout URL received')
-            }
+            // Redirect to Stripe's hosted setup page
+            window.location.href = setupIntentUrl
+            
         } catch (err) {
-            console.error('Payment error:', err)
-            setError(err.message || 'Failed to initiate payment. Please try again.')
+            console.error('Setup error:', err)
+            setError(err.message || 'Failed to setup payment method. Please try again.')
         } finally {
             setIsProcessing(false)
         }
@@ -74,7 +70,7 @@ function PaymentForm({ price, service_type, address, lot_size, phone }: PaymentF
                     opacity: isProcessing ? 0.7 : 1,
                 }}
             >
-                {isProcessing ? "Processing..." : "Proceed to Payment"}
+                {isProcessing ? "Processing..." : "Save Payment Method"}
             </button>
             
             {error && (

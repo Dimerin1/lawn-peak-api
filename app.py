@@ -114,7 +114,13 @@ def create_payment_intent():
 @app.route('/create-setup-intent', methods=['POST'])
 def create_setup_intent():
     try:
-        data = request.get_json()
+        data = request.json
+        return_url = data.get('return_url')
+        
+        if not return_url:
+            return jsonify({'error': 'Return URL is required'}), 400
+
+        # Create a Customer
         customer = stripe.Customer.create(
             metadata={
                 'service_type': data.get('service_type'),
@@ -125,22 +131,79 @@ def create_setup_intent():
             }
         )
         
+        # Create Setup Intent with the customer
         setup_intent = stripe.SetupIntent.create(
             customer=customer.id,
             payment_method_types=['card'],
-            metadata={
-                'service_type': data.get('service_type'),
-                'address': data.get('address'),
-                'lot_size': data.get('lot_size'),
-                'phone': data.get('phone'),
-                'price': str(data.get('price'))
-            }
+            usage='off_session',  # Important for later charging
+        )
+        
+        # Create a Stripe Checkout Session for setup
+        session = stripe.checkout.Session.create(
+            mode='setup',
+            customer=customer.id,
+            payment_method_types=['card'],
+            setup_intent_data={
+                'metadata': {
+                    'service_type': data.get('service_type'),
+                    'address': data.get('address'),
+                    'lot_size': data.get('lot_size'),
+                    'phone': data.get('phone'),
+                    'price': str(data.get('price'))
+                }
+            },
+            success_url=return_url + '?setup=success&customer_id={CUSTOMER_ID}',
+            cancel_url=return_url + '?setup=canceled'
         )
         
         return jsonify({
-            'clientSecret': setup_intent.client_secret,
-            'customerId': customer.id
+            'setupIntentUrl': session.url
         })
+
+    except Exception as e:
+        print('Error creating setup intent:', str(e))
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/charge-customer', methods=['POST'])
+def charge_customer():
+    try:
+        data = request.json
+        customer_id = data.get('customer_id')
+        amount = data.get('amount')  # Amount in dollars
+        
+        if not all([customer_id, amount]):
+            return jsonify({'error': 'Customer ID and amount are required'}), 400
+
+        # Get customer's default payment method
+        customer = stripe.Customer.retrieve(customer_id)
+        payment_methods = stripe.PaymentMethod.list(
+            customer=customer_id,
+            type='card'
+        )
+        
+        if not payment_methods.data:
+            return jsonify({'error': 'No payment method found for customer'}), 400
+
+        # Create and confirm the payment intent
+        payment_intent = stripe.PaymentIntent.create(
+            amount=int(float(amount) * 100),  # Convert to cents
+            currency='usd',
+            customer=customer_id,
+            payment_method=payment_methods.data[0].id,
+            off_session=True,
+            confirm=True,
+            metadata=customer.metadata
+        )
+        
+        return jsonify({
+            'success': True,
+            'payment_intent_id': payment_intent.id,
+            'amount': amount,
+            'status': payment_intent.status
+        })
+
+    except stripe.error.CardError as e:
+        return jsonify({'error': 'Card was declined', 'details': str(e)}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
@@ -172,6 +235,7 @@ def capture_payment():
             'success': True,
             'payment_intent': payment_intent.id
         })
+
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 

@@ -188,7 +188,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         setPaymentError("")
         
         try {
-            const response = await fetch('https://lawn-peak-api.onrender.com/create-payment-intent', {
+            const response = await fetch('https://lawn-peak-api.onrender.com/create-setup-intent', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -198,26 +198,26 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     service_type: formData.service,
                     address: formData.address,
                     lot_size: formData.lotSize,
-                    phone: formData.phone
+                    phone: formData.phone,
+                    return_url: window.location.origin + '/dashboard'
                 })
             })
 
             if (!response.ok) {
                 const errorData = await response.json()
-                throw new Error(errorData.error || 'Failed to create payment intent')
+                throw new Error(errorData.error || 'Failed to setup payment method')
             }
 
             const data = await response.json()
             
-            // Store the payment intent ID for later use
-            localStorage.setItem('paymentIntentId', data.intentId)
-            
-            // Redirect to success page - we'll implement this later
-            window.location.href = window.location.origin + '/payment-success'
-            
+            if (data.setupIntentUrl) {
+                window.location.href = data.setupIntentUrl
+            } else {
+                throw new Error('No setup URL received')
+            }
         } catch (err) {
-            console.error('Payment error:', err)
-            setPaymentError(err.message || 'Failed to process payment method. Please try again.')
+            console.error('Setup error:', err)
+            setPaymentError(err.message || 'Failed to setup payment method. Please try again.')
         } finally {
             setIsProcessingPayment(false)
         }
