@@ -56,26 +56,24 @@ export function withAddressInput(): Override {
                         "Accept": "application/json",
                         "Origin": "https://fabulous-screenshot-716470.framer.app"
                     },
-                    mode: "cors",
-                    credentials: "include",
                     body: JSON.stringify({
-                        address: formData.address,
-                        name: formData.name,
-                        email: formData.email,
-                        phone: formData.phone,
+                        address: formData.address
                     }),
                 })
 
                 if (!response.ok) {
-                    console.error("Server response:", await response.text())
-                    throw new Error(`Failed to fetch lot size: ${response.status}`)
+                    const errorText = await response.text()
+                    console.error("Lot size error response:", errorText)
+                    throw new Error(`Failed to fetch lot size: ${errorText}`)
                 }
                 
                 const data = await response.json()
                 formData.lotSize = data.lot_size
-                console.log("Lot Size:", formData.lotSize)
+                console.log("Lot Size set to:", formData.lotSize)
             } catch (error) {
                 console.error("Error fetching lot size:", error)
+                formData.lotSize = 0 // Reset lot size on error
+                throw error
             }
         },
     }
@@ -86,12 +84,20 @@ export function withServiceSelect(): Override {
     return {
         onChange: async (event) => {
             formData.service = event.target.value
-            console.log("Service:", formData.service)
+            console.log("Service selected:", formData.service)
+            console.log("Current lot size:", formData.lotSize)
 
             try {
                 if (!formData.lotSize) {
+                    console.error("Lot size is missing")
                     throw new Error("Please enter your address first to calculate the lot size")
                 }
+
+                const requestBody = {
+                    lot_size: formData.lotSize,
+                    service: formData.service,
+                }
+                console.log("Sending price calculation request:", requestBody)
 
                 const response = await fetch(`${API_URL}/api/calculate-price`, {
                     method: "POST",
@@ -100,23 +106,18 @@ export function withServiceSelect(): Override {
                         "Accept": "application/json",
                         "Origin": "https://fabulous-screenshot-716470.framer.app"
                     },
-                    mode: "cors",
-                    credentials: "include",
-                    body: JSON.stringify({
-                        lot_size: formData.lotSize,
-                        service: formData.service,
-                    }),
+                    body: JSON.stringify(requestBody)
                 })
 
                 if (!response.ok) {
                     const errorText = await response.text()
-                    console.error("Server response:", errorText)
+                    console.error("Price calculation error response:", errorText)
                     throw new Error(`Failed to calculate price: ${errorText}`)
                 }
 
                 const data = await response.json()
                 formData.price = data.price
-                console.log("Price:", formData.price)
+                console.log("Price calculated:", formData.price)
 
                 // Update price display if it exists
                 const priceDisplay = document.querySelector("[data-framer-name='PriceDisplay']")
@@ -124,10 +125,10 @@ export function withServiceSelect(): Override {
                     priceDisplay.textContent = `$${formData.price}`
                 }
             } catch (error) {
-                console.error("Error calculating price:", error)
+                console.error("Error in price calculation:", error)
                 const priceDisplay = document.querySelector("[data-framer-name='PriceDisplay']")
                 if (priceDisplay) {
-                    priceDisplay.textContent = "Error calculating price"
+                    priceDisplay.textContent = error.message || "Error calculating price"
                 }
                 throw error
             }

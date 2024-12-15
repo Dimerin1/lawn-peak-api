@@ -126,27 +126,45 @@ def get_lot_size_endpoint():
 def calculate_price_endpoint():
     try:
         data = request.json
+        print("Received price calculation request:", data)  # Debug log
+        
         lot_size = data.get('lot_size')
         service = data.get('service')
         
         if not lot_size:
             return jsonify({'error': 'Lot size is required'}), 400
+            
+        if not isinstance(lot_size, (int, float)):
+            return jsonify({'error': f'Invalid lot size type: {type(lot_size)}. Expected number.'}), 400
+            
+        if not service:
+            return jsonify({'error': 'Service type is required'}), 400
+            
+        if service not in ['weekly', 'biweekly', 'one time']:
+            return jsonify({'error': f'Invalid service type: {service}'}), 400
 
         # Calculate base price
         price = calculate_price(lot_size)
+        print(f"Base price for {lot_size} sq ft: ${price}")  # Debug log
         
         # Apply service discount
         if service == 'weekly':
             price = round(price * 0.9)  # 10% discount
+            print("Applied 10% weekly discount")  # Debug log
         elif service == 'biweekly':
             price = round(price * 0.95)  # 5% discount
+            print("Applied 5% biweekly discount")  # Debug log
 
-        return jsonify({
+        response_data = {
             'price': price,
-            'service': service
-        })
+            'service': service,
+            'lot_size': lot_size
+        }
+        print("Sending response:", response_data)  # Debug log
+        return jsonify(response_data)
 
     except Exception as e:
+        print(f"Error in price calculation: {str(e)}")  # Debug log
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/create-payment', methods=['POST'])
