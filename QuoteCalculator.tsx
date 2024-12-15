@@ -70,6 +70,8 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
     const [priceDisplay, setPriceDisplay] = React.useState("")
     const [error, setError] = React.useState("")
     const [isLoading, setIsLoading] = React.useState(false)
+    const [isProcessingPayment, setIsProcessingPayment] = React.useState(false)
+    const [paymentError, setPaymentError] = React.useState("")
 
     const handleAddressSelect = async (address: string) => {
         setIsLoading(true)
@@ -181,86 +183,92 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         }
     };
 
+    const handlePaymentSetup = async () => {
+        setIsProcessingPayment(true)
+        setPaymentError("")
+        
+        try {
+            const response = await fetch('https://lawn-peak-api.onrender.com/create-setup-intent', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    price: formData.price,
+                    service_type: formData.service,
+                    address: formData.address,
+                    lot_size: formData.lotSize,
+                    phone: formData.phone
+                })
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json()
+                throw new Error(errorData.error || 'Failed to set up payment method')
+            }
+
+            const data = await response.json()
+            
+            // Store customer ID in localStorage for later use
+            localStorage.setItem('lawn_peak_customer_id', data.customerId)
+            
+            // Redirect to Stripe's hosted payment method setup page
+            window.location.href = `https://checkout.stripe.com/setup/${data.clientSecret}`
+        } catch (err) {
+            console.error('Payment setup error:', err)
+            setPaymentError(err.message || 'Failed to set up payment method. Please try again.')
+        } finally {
+            setIsProcessingPayment(false)
+        }
+    }
+
     return (
         <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "16px" }}>
-            <AddressInput
-                value={formData.address}
-                onChange={(value) => setFormData(prev => ({ ...prev, address: value }))}
-                onSelect={handleAddressSelect}
-                style={{
-                    input: {
-                        width: "100%",
-                        height: "60px",
-                        padding: "12px 16px",
-                        fontSize: "16px",
-                        lineHeight: "1.2",
-                        fontFamily: "Be Vietnam Pro",
-                        fontWeight: "400",
-                        color: "#999999",
-                        backgroundColor: "rgba(187, 187, 187, 0.15)",
-                        border: "none",
-                        borderRadius: "12px",
-                        outline: "none",
-                        boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.2)"
-                    }
-                }}
-            />
+            <form onSubmit={(e) => e.preventDefault()}>
+                <AddressInput
+                    value={formData.address}
+                    onChange={(value) => setFormData(prev => ({ ...prev, address: value }))}
+                    onSelect={handleAddressSelect}
+                    style={{
+                        input: inputStyle
+                    }}
+                />
 
-            {/* Add global styles for address input placeholder */}
-            <style>
-                {`
-                    input[type="text"]::placeholder {
-                        color: #999999 !important;
-                        opacity: 1 !important;
-                    }
-                    input[type="text"]::-webkit-input-placeholder {
-                        color: #999999 !important;
-                        opacity: 1 !important;
-                    }
-                    input[type="text"]::-moz-placeholder {
-                        color: #999999 !important;
-                        opacity: 1 !important;
-                    }
-                    input[type="text"]:-ms-input-placeholder {
-                        color: #999999 !important;
-                        opacity: 1 !important;
-                    }
-                    .pac-container {
-                        font-family: "Be Vietnam Pro", sans-serif !important;
-                    }
-                    .pac-item, .pac-item-query {
-                        color: #999999 !important;
-                        opacity: 1 !important;
-                    }
-                `}
-            </style>
+                <select
+                    value={formData.lotSize}
+                    onChange={handleLotSizeChange}
+                    style={{ ...selectStyle, marginTop: "16px" }}
+                >
+                    <option value="" style={{ color: "#999999" }}>Select Lot Size</option>
+                    {lotSizeOptions.map(option => (
+                        <option key={option.value} value={option.value} style={{ color: "#999999" }}>
+                            {option.label}
+                        </option>
+                    ))}
+                </select>
 
-            {/* Add Lot Size Dropdown */}
-            <select
-                value={formData.lotSize}
-                onChange={handleLotSizeChange}
-                style={selectStyle}
-            >
-                <option value="" style={{ color: "#999999" }}>Select Lot Size</option>
-                {lotSizeOptions.map(option => (
-                    <option key={option.value} value={option.value} style={{ color: "#999999" }}>
-                        {option.label}
-                    </option>
-                ))}
-            </select>
+                <select 
+                    value={formData.service}
+                    onChange={handleServiceChange}
+                    style={{ ...selectStyle, marginTop: "16px" }}
+                >
+                    <option value="" style={{ color: "#999999" }}>Select a service frequency...</option>
+                    {Object.entries(SERVICES).map(([value, service]) => (
+                        <option key={value} value={value} style={{ color: "#999999" }}>
+                            {service.name}
+                        </option>
+                    ))}
+                </select>
 
-            <select 
-                value={formData.service}
-                onChange={handleServiceChange}
-                style={selectStyle}
-            >
-                <option value="" style={{ color: "#999999" }}>Select a service frequency...</option>
-                {Object.entries(SERVICES).map(([value, service]) => (
-                    <option key={value} value={value} style={{ color: "#999999" }}>
-                        {service.name}
-                    </option>
-                ))}
-            </select>
+                <input
+                    type="tel"
+                    placeholder="Phone number"
+                    value={formData.phone}
+                    onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                    style={{ ...inputStyle, marginTop: "16px" }}
+                />
+            </form>
+
             {error && (
                 <div style={{
                     color: "#e53e3e",
@@ -274,6 +282,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     {error}
                 </div>
             )}
+
             {isLoading ? (
                 <div style={{
                     textAlign: "center",
@@ -283,173 +292,120 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     Calculating price...
                 </div>
             ) : formData.price && !isLoading && (
-                <div className="price-container">
-                    <div className="price-title">
-                        Estimated Price
+                <>
+                    <div className="price-container">
+                        <div className="price-title">Estimated Price</div>
+                        <div className="price-amount">${formData.price}</div>
+                        {(formData.service === 'WEEKLY' || formData.service === 'BI_WEEKLY') && (
+                            <div className="savings-badge">
+                                Save {formData.service === 'WEEKLY' ? '25%' : '15%'}
+                            </div>
+                        )}
                     </div>
-                    <div className="price-amount">
-                        ${formData.price}
-                    </div>
-                    {(formData.service === 'WEEKLY' || formData.service === 'BI_WEEKLY') && (
-                        <div className="savings-badge">
-                            Save {formData.service === 'WEEKLY' ? '25%' : '15%'}
+                    
+                    {formData.address && formData.lotSize && formData.service && formData.phone ? (
+                        <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <button
+                                onClick={handlePaymentSetup}
+                                disabled={isProcessingPayment}
+                                style={{
+                                    width: "100%",
+                                    padding: "16px",
+                                    backgroundColor: "#FFC043",
+                                    border: "none",
+                                    borderRadius: "12px",
+                                    color: "#000",
+                                    fontSize: "16px",
+                                    fontWeight: "500",
+                                    cursor: isProcessingPayment ? "not-allowed" : "pointer",
+                                    opacity: isProcessingPayment ? 0.7 : 1,
+                                }}
+                            >
+                                {isProcessingPayment ? "Processing..." : "Save Payment Method"}
+                            </button>
+                            
+                            <div style={{
+                                textAlign: "center",
+                                color: "#718096",
+                                fontSize: "14px",
+                                marginTop: "8px"
+                            }}>
+                                Your card will not be charged until after the service is completed
+                            </div>
+                            
+                            {paymentError && (
+                                <div style={{
+                                    color: "#e53e3e",
+                                    padding: "12px",
+                                    borderRadius: "8px",
+                                    backgroundColor: "rgba(229, 62, 62, 0.1)",
+                                    marginTop: "8px",
+                                    fontSize: "14px"
+                                }}>
+                                    {paymentError}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div style={{
+                            color: "#718096",
+                            padding: "12px",
+                            borderRadius: "8px",
+                            backgroundColor: "rgba(113, 128, 150, 0.1)",
+                            marginTop: "8px",
+                            fontSize: "14px",
+                            textAlign: "center"
+                        }}>
+                            Fill in all fields above to proceed with payment
                         </div>
                     )}
-                    <div className="price-description">
-                        {formData.service === 'ONE_TIME' ? 'One-time service' :
-                         formData.service === 'BI_WEEKLY' ? 'Bi-weekly service' :
-                         formData.service === 'WEEKLY' ? 'Weekly service' :
-                         'Monthly service'}
-                    </div>
-                </div>
+                </>
             )}
+
             <style>
                 {`
                     @keyframes fadeIn {
-                        from {
-                            opacity: 0;
-                            transform: translateY(10px);
-                        }
-                        to {
-                            opacity: 1;
-                            transform: translateY(0);
-                        }
+                        from { opacity: 0; transform: translateY(-10px); }
+                        to { opacity: 1; transform: translateY(0); }
                     }
-
-                    @keyframes slideIn {
-                        from {
-                            transform: translateX(-20px);
-                            opacity: 0;
-                        }
-                        to {
-                            transform: translateX(0);
-                            opacity: 1;
-                        }
-                    }
-
+                    
                     .price-container {
-                        background: linear-gradient(135deg, #FBB040 0%, #FB8C00 100%);
-                        border-radius: 16px;
-                        padding: 32px;
-                        color: white;
-                        box-shadow: 0px 4px 12px rgba(251, 176, 64, 0.2);
-                        animation: fadeIn 0.5s ease-out;
-                        transition: all 0.3s ease;
-                        position: relative;
-                        overflow: hidden;
-                        margin: 16px 0;
-                    }
-
-                    .savings-badge {
-                        position: absolute;
-                        top: 20px;
-                        right: -35px;
-                        background: #4CAF50;
-                        color: white;
-                        padding: 8px 40px;
-                        font-size: 16px;
-                        font-weight: 600;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-                        animation: slideIn 0.5s ease-out 0.3s;
-                        animation-fill-mode: both;
-                        transform: rotate(45deg);
+                        background-color: #f7fafc;
+                        padding: 24px;
+                        border-radius: 12px;
                         text-align: center;
-                        width: 150px;
+                        animation: fadeIn 0.3s ease-out;
                     }
-
-                    .savings-badge::before {
-                        content: '';
-                        position: absolute;
-                        top: 0;
-                        left: 0;
-                        width: 100%;
-                        height: 100%;
-                        background: rgba(255,255,255,0.1);
-                        transform: translateX(-100%);
-                        animation: shine 2s infinite;
-                    }
-
-                    @keyframes shine {
-                        0% {
-                            transform: translateX(-100%);
-                        }
-                        60% {
-                            transform: translateX(100%);
-                        }
-                        100% {
-                            transform: translateX(100%);
-                        }
-                    }
-
-                    .price-container:hover {
-                        transform: translateY(-2px);
-                        box-shadow: 0px 6px 16px rgba(251, 176, 64, 0.3);
-                    }
-
+                    
                     .price-title {
-                        font-size: 24px;
-                        font-weight: 600;
-                        margin-bottom: 16px;
-                        animation: slideIn 0.5s ease-out;
+                        color: #4a5568;
+                        font-size: 16px;
+                        margin-bottom: 8px;
                     }
-
+                    
                     .price-amount {
-                        font-size: 48px;
+                        color: #2d3748;
+                        font-size: 36px;
                         font-weight: 700;
-                        margin-bottom: 16px;
-                        animation: slideIn 0.5s ease-out 0.1s;
-                        animation-fill-mode: both;
-                        letter-spacing: -0.02em;
                     }
-
+                    
+                    .savings-badge {
+                        display: inline-block;
+                        background-color: #48bb78;
+                        color: white;
+                        padding: 4px 12px;
+                        border-radius: 9999px;
+                        font-size: 14px;
+                        margin-top: 8px;
+                    }
+                    
                     .price-description {
-                        font-size: 18px;
-                        opacity: 0.9;
-                        animation: slideIn 0.5s ease-out 0.2s;
-                        animation-fill-mode: both;
-                        font-weight: 500;
-                    }
-
-                    .input-container {
-                        transition: all 0.3s ease;
-                    }
-
-                    .input-container:focus-within {
-                        transform: translateY(-2px);
-                    }
-
-                    select, input {
-                        transition: all 0.3s ease;
-                    }
-
-                    select:hover, input:hover {
-                        background-color: rgba(187, 187, 187, 0.2) !important;
+                        color: #718096;
+                        font-size: 14px;
+                        margin-top: 8px;
                     }
                 `}
             </style>
-            <div className="input-container">
-                <input
-                    type="tel"
-                    placeholder="Phone number"
-                    value={formData.phone}
-                    onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                    style={{
-                        width: "100%",
-                        height: "60px",
-                        padding: "12px 16px",
-                        fontSize: "16px",
-                        lineHeight: "1.2",
-                        fontFamily: "Be Vietnam Pro",
-                        fontWeight: "400",
-                        color: "#999999",
-                        backgroundColor: "rgba(187, 187, 187, 0.15)",
-                        border: "none",
-                        borderRadius: "12px",
-                        outline: "none",
-                        boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.2)"
-                    }}
-                />
-            </div>
         </div>
     )
 }
