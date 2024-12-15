@@ -83,8 +83,9 @@ export function withAddressInput(): Override {
 export function withServiceSelect(): Override {
     return {
         onChange: async (event) => {
-            formData.service = event.target.value
-            console.log("Service selected:", formData.service)
+            const selectedService = event.target.value
+            formData.service = selectedService
+            console.log("Service selected:", selectedService)
             console.log("Current lot size:", formData.lotSize)
 
             try {
@@ -93,9 +94,19 @@ export function withServiceSelect(): Override {
                     throw new Error("Please enter your address first to calculate the lot size")
                 }
 
+                // Validate service type
+                const validServices = [
+                    'Lawn mowing (one time)',
+                    'Lawn mowing (weekly)',
+                    'Lawn mowing (biweekly)'
+                ]
+                if (!validServices.includes(selectedService)) {
+                    throw new Error(`Invalid service type. Expected one of: ${validServices.join(', ')}`)
+                }
+
                 const requestBody = {
                     lot_size: formData.lotSize,
-                    service: formData.service,
+                    service: selectedService
                 }
                 console.log("Sending price calculation request:", requestBody)
 

@@ -139,19 +139,27 @@ def calculate_price_endpoint():
             
         if not service:
             return jsonify({'error': 'Service type is required'}), 400
-            
-        if service not in ['weekly', 'biweekly', 'one time']:
-            return jsonify({'error': f'Invalid service type: {service}'}), 400
+
+        # Map Framer service values to internal values
+        service_mapping = {
+            'Lawn mowing (one time)': 'one time',
+            'Lawn mowing (weekly)': 'weekly',
+            'Lawn mowing (biweekly)': 'biweekly'
+        }
+        
+        internal_service = service_mapping.get(service)
+        if not internal_service:
+            return jsonify({'error': f'Invalid service type: {service}. Expected one of: {list(service_mapping.keys())}'}), 400
 
         # Calculate base price
         price = calculate_price(lot_size)
         print(f"Base price for {lot_size} sq ft: ${price}")  # Debug log
         
         # Apply service discount
-        if service == 'weekly':
+        if internal_service == 'weekly':
             price = round(price * 0.9)  # 10% discount
             print("Applied 10% weekly discount")  # Debug log
-        elif service == 'biweekly':
+        elif internal_service == 'biweekly':
             price = round(price * 0.95)  # 5% discount
             print("Applied 5% biweekly discount")  # Debug log
 
