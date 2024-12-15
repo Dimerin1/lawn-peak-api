@@ -201,7 +201,8 @@ function QuoteCalculator() {
                     backgroundRepeat: "no-repeat",
                     backgroundPosition: "right 16px top 50%",
                     backgroundSize: "12px auto",
-                    paddingRight: "48px"
+                    paddingRight: "48px",
+                    boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.2)"
                 }}
             >
                 <option value="">Select Lot Size</option>
@@ -239,7 +240,8 @@ function QuoteCalculator() {
                     backgroundRepeat: "no-repeat",
                     backgroundPosition: "right 16px top 50%",
                     backgroundSize: "12px auto",
-                    paddingRight: "48px"
+                    paddingRight: "48px",
+                    boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.2)"
                 }}
             >
                 <option value="">Select a service frequency...</option>
@@ -343,7 +345,8 @@ function AddressInput({ onAddressSelect, error, isLoading }) {
                         backgroundColor: "rgba(187, 187, 187, 0.15)",
                         border: "none",
                         borderRadius: "12px",
-                        outline: "none"
+                        outline: "none",
+                        boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.2)"
                     }}
                 />
                 {isLoadingAddress && (
