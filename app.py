@@ -10,16 +10,7 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 
 app = Flask(__name__)
-
-# Configure CORS with specific origin
-CORS(app, resources={
-    r"/*": {
-        "origins": ["https://fabulous-screenshot-716470.framer.app"],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "Accept", "Origin"],
-        "supports_credentials": True
-    }
-})
+CORS(app)  # Enable CORS for all routes
 
 # Load environment variables
 load_dotenv()
@@ -119,6 +110,70 @@ def create_payment_intent():
     except Exception as e:
         print('Error creating payment intent:', str(e))
         return jsonify({'error': 'An unexpected error occurred'}), 500
+
+@app.route('/create-setup-intent', methods=['POST'])
+def create_setup_intent():
+    try:
+        data = request.get_json()
+        customer = stripe.Customer.create(
+            metadata={
+                'service_type': data.get('service_type'),
+                'address': data.get('address'),
+                'lot_size': data.get('lot_size'),
+                'phone': data.get('phone'),
+                'price': str(data.get('price'))
+            }
+        )
+        
+        setup_intent = stripe.SetupIntent.create(
+            customer=customer.id,
+            payment_method_types=['card'],
+            metadata={
+                'service_type': data.get('service_type'),
+                'address': data.get('address'),
+                'lot_size': data.get('lot_size'),
+                'phone': data.get('phone'),
+                'price': str(data.get('price'))
+            }
+        )
+        
+        return jsonify({
+            'clientSecret': setup_intent.client_secret,
+            'customerId': customer.id
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/capture-payment', methods=['POST'])
+def capture_payment():
+    try:
+        data = request.get_json()
+        customer_id = data.get('customer_id')
+        amount = data.get('amount')  # Amount in cents
+        
+        # Get the customer's default payment method
+        customer = stripe.Customer.retrieve(customer_id)
+        
+        # Create and confirm a PaymentIntent
+        payment_intent = stripe.PaymentIntent.create(
+            amount=amount,
+            currency='usd',
+            customer=customer_id,
+            confirm=True,
+            metadata={
+                'service_type': customer.metadata.get('service_type'),
+                'address': customer.metadata.get('address'),
+                'lot_size': customer.metadata.get('lot_size'),
+                'phone': customer.metadata.get('phone')
+            }
+        )
+        
+        return jsonify({
+            'success': True,
+            'payment_intent': payment_intent.id
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
