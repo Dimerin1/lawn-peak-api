@@ -1,75 +1,37 @@
 // @ts-ignore
 import { Override } from "framer"
+import { formData } from "./shared/FormData"
+
+function debounce<T extends (...args: any[]) => any>(
+    func: T,
+    wait: number
+): (...args: Parameters<T>) => void {
+    let timeout: NodeJS.Timeout | null = null;
+    
+    return (...args: Parameters<T>) => {
+        if (timeout) {
+            clearTimeout(timeout);
+        }
+        
+        timeout = setTimeout(() => {
+            func(...args);
+            timeout = null;
+        }, wait);
+    };
+}
 
 declare global {
     interface Window {
-        google: typeof google;
+        google: any;
+        stripeInstance: any;
+        initMap: () => void;
+        mapboxgl: any;
     }
 }
 
+declare const MapboxGeocoder: any;
+
 const API_URL = "https://lawn-peak-api.onrender.com"
-
-// Initialize form data
-const formData = {
-    name: "",
-    email: "",
-    phone: "",
-    address: "",
-    service: "",
-    price: 0,
-    lotSize: 0
-}
-
-// Initialize Google Places Autocomplete
-function initializeAutocomplete(input: HTMLInputElement) {
-    console.log("Setting up autocomplete for:", input);
-    const autocomplete = new window.google.maps.places.Autocomplete(input, {
-        types: ['address'],
-        componentRestrictions: { country: "us" }
-    });
-
-    autocomplete.addListener('place_changed', async () => {
-        const place = autocomplete.getPlace();
-        if (!place.formatted_address) {
-            console.error("No address found");
-            return;
-        }
-
-        try {
-            formData.address = place.formatted_address;
-            console.log("Address selected:", formData.address);
-
-            const response = await fetch(`${API_URL}/api/lot-size`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                    "Origin": "https://fabulous-screenshot-716470.framer.app"
-                },
-                body: JSON.stringify({
-                    address: formData.address
-                })
-            });
-
-            const responseText = await response.text();
-            console.log("Lot size response:", responseText);
-
-            if (!response.ok) {
-                throw new Error(responseText || "Failed to fetch lot size");
-            }
-
-            const data = JSON.parse(responseText);
-            formData.lotSize = Number(data.lot_size);
-            console.log("Lot Size set to:", formData.lotSize);
-
-            // Update the input value
-            input.value = formData.address;
-        } catch (error) {
-            console.error("Error fetching lot size:", error);
-            formData.lotSize = 0;
-        }
-    });
-}
 
 // Step 1: Name Input
 export function withNameInput(): Override {
@@ -102,25 +64,22 @@ export function withEmailInput(): Override {
 
 export function withAddressInput(): Override {
     return {
-        onMount: () => {
-            console.log("Address input mounted");
-            setTimeout(() => {
-                const input = document.querySelector<HTMLInputElement>('input[data-framer-name="AddressInput"]');
-                if (input && window.google) {
-                    console.log("Initializing autocomplete for input:", input);
-                    initializeAutocomplete(input);
-                } else {
-                    console.error("Address input or Google Places not found:", {
-                        input: !!input,
-                        google: !!window.google
-                    });
-                }
-            }, 1000); // Give time for the input to be mounted
+        onValueChange: {
+            type: "enter",
+            value: (value: string) => {
+                console.log("Address value:", value);
+                formData.address = value;
+            }
         },
-        onChange: event => {
-            // This will be handled by the autocomplete listener
-            console.log("Address input changed:", event.target.value);
-        }
+        value: formData.address || "",
+        style: {
+            backgroundColor: "#fff",
+            border: "1px solid #e2e8f0",
+            borderRadius: "8px",
+            padding: "12px",
+            fontSize: "16px",
+        },
+        placeholder: "Enter your address..."
     }
 }
 
@@ -132,44 +91,26 @@ export function withServiceSelect(): Override {
                 const selectedService = event.target.value;
                 formData.service = selectedService;
                 console.log("Service selected:", selectedService);
+                console.log("Current address:", formData.address);
+                console.log("Current lot size:", formData.lotSize);
 
-                if (!formData.lotSize) {
-                    const error = new Error("Please enter your address first");
-                    console.error(error.message);
-                    updatePriceDisplay(error.message);
+                if (!formData.address) {
+                    console.log("Please enter your address first");
+                    updatePriceDisplay("Please enter your address first");
                     return;
                 }
 
-                const requestBody = {
-                    lot_size: Number(formData.lotSize),
-                    service: selectedService.toLowerCase()
-                };
-                console.log("Price calculation request:", requestBody);
-
-                const response = await fetch(`${API_URL}/api/calculate-price`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Accept": "application/json",
-                        "Origin": "https://fabulous-screenshot-716470.framer.app"
-                    },
-                    body: JSON.stringify(requestBody)
-                });
-
-                const responseText = await response.text();
-                console.log("Price calculation response:", responseText);
-
-                if (!response.ok) {
-                    throw new Error(responseText || "Failed to calculate price");
-                }
-
-                const data = JSON.parse(responseText);
-                formData.price = data.price;
-                console.log("Price set to:", formData.price);
+                // Calculate price
+                const basePrice = 30;
+                const pricePerSqFt = 0.01;
+                const calculatedPrice = basePrice + (formData.lotSize * pricePerSqFt);
+                formData.price = Math.round(calculatedPrice);
+                
+                console.log("Calculated price:", formData.price);
                 updatePriceDisplay(`$${formData.price}`);
             } catch (error) {
-                console.error("Error calculating price:", error);
-                updatePriceDisplay(error.message || "Error calculating price");
+                console.error("Error:", error);
+                updatePriceDisplay("Error calculating price");
             }
         }
     }
@@ -197,6 +138,21 @@ export function withNextButton(): Override {
             // Handle final step
             if (currentStep === 3) {
                 try {
+                    // Load Stripe dynamically
+                    if (!window.stripeInstance) {
+                        const stripeScript = document.createElement('script');
+                        stripeScript.src = 'https://js.stripe.com/v3/';
+                        document.head.appendChild(stripeScript);
+                        
+                        await new Promise((resolve, reject) => {
+                            stripeScript.onload = () => {
+                                window.stripeInstance = Stripe('pk_test_fYbv6F0yKXkfGVU6knKh7pZF00sXtoopsp');
+                                resolve(null);
+                            };
+                            stripeScript.onerror = () => reject(new Error('Failed to load Stripe'));
+                        });
+                    }
+
                     const response = await fetch(`${API_URL}/api/create-payment`, {
                         method: "POST",
                         headers: {
@@ -216,14 +172,12 @@ export function withNextButton(): Override {
                         })
                     });
 
-                    const responseText = await response.text();
-                    console.log("Payment response:", responseText);
-
                     if (!response.ok) {
-                        throw new Error(responseText || "Failed to create payment");
+                        const errorText = await response.text();
+                        throw new Error(`Failed to create payment: ${errorText}`);
                     }
 
-                    const data = JSON.parse(responseText);
+                    const data = await response.json();
                     console.log("Payment created:", data);
                 } catch (error) {
                     console.error("Error creating payment:", error);
@@ -244,20 +198,5 @@ function validateStep(step: number): boolean {
             return !!formData.service;
         default:
             return true;
-    }
-}
-
-// Optional: Add loading state overrides
-export function withLoadingIndicator(): Override {
-    return {
-        visible: false
-    }
-}
-
-// Optional: Add error message overrides
-export function withErrorMessage(): Override {
-    return {
-        visible: false,
-        text: ""
     }
 }

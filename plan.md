@@ -5,127 +5,81 @@ A complete solution for integrating address-based quotes and Stripe payment proc
 
 ## Components
 
-### 1. Address Input & Lot Size Calculation
-- [x] Google Sheets Integration (Spreadsheet ID: 19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA)
-- [x] Google Geocoding API Integration
-- [x] Lot Size Calculation System
+### 1. Address Input & Service Selection
+- [x] Google Places Autocomplete Integration
+- [x] Address Validation
+- [x] Service Selection Component
+- [x] State Management between Components
+- [ ] Real Lot Size Calculation (currently using default 5000 sq ft)
 
 ### 2. Price Calculation
-- [x] Base Price Calculation (lot_size * $0.003843)
-- [x] Minimum Price Check ($30)
-- [x] Margin Application (70%)
-- [x] Round prices to whole numbers
+- [x] Base Price Implementation ($30 base)
+- [x] Area-based Pricing ($0.01 per sq ft)
+- [x] Service-specific Discounts
+  - [x] One-time mowing (standard price)
+  - [x] Weekly mowing (30% discount)
+  - [x] Bi-Weekly mowing (20% discount)
+  - [x] Monthly mowing (standard price)
+- [x] Price Display with Discount Information
+- [x] Per-service Price Indication
 
-### 3. Stripe Integration
-- [x] Stripe Elements Setup
-- [x] Payment Pre-authorization
-- [x] Final Payment Capture
+### 3. Form Flow
+- [x] Address Input Validation
+- [x] Service Selection Validation
+- [x] Price Calculation Integration
+- [ ] Error Handling Improvements
+- [ ] Loading States
 
-## Function Definitions
+### 4. Stripe Integration (Pending)
+- [ ] Stripe Elements Setup
+- [ ] Payment Pre-authorization
+- [ ] Final Payment Capture
+- [ ] Recurring Payment Setup for Weekly/Bi-Weekly/Monthly Services
 
-### `getLotSizeFromAddress(address: string)`
-- Input: Street address
-- Output: Lot size in square feet
-- Purpose: Convert address to coordinates and retrieve lot size
+## Components Structure
+
+### `QuoteCalculator`
+- Main component managing form state and logic
+- Handles data flow between child components
+- Manages price calculations with discounts
 - Status: 
 
-### `calculatePrice(lotSize: number)`
-- Input: Lot size in square feet
-- Output: Final price (whole number)
-- Purpose: Calculate quote based on lot size with minimum price and margin
+### `AddressInput`
+- Google Places Autocomplete integration
+- Address validation and formatting
+- Lot size assignment (currently default)
 - Status: 
 
-### `createPaymentIntent(amount: number)`
-- Input: Final quote amount
-- Output: Stripe PaymentIntent object
-- Purpose: Pre-authorize payment card
+### `ServiceSelect`
+- Service options with frequency selection
+- Discount application based on frequency
+- Price calculation with discounts
 - Status: 
 
-### `capturePayment(paymentIntentId: string)`
-- Input: PaymentIntent ID
-- Output: Payment confirmation
-- Purpose: Complete the payment after job completion
-- Status: 
+## Next Steps
+
+1. Integrate real lot size calculation
+2. Implement loading states and error handling
+3. Set up Stripe payment integration
+   - One-time payments for single service
+   - Recurring payments for subscription services
+4. Add form completion and submission flow
+5. Add service scheduling interface
 
 ## API Keys Required
-- Google Geocoding API
-- Stripe API
-- Google Sheets API
+- Google Places API (Implemented)
+- Google Maps API (Pending for lot size)
+- Stripe API (Pending for payments)
 
-## Tech Stack
-- Frontend: HTML, CSS, JavaScript with Tailwind CSS
-- Backend: Python/Flask
-- Payment Processing: Stripe
-- Data Storage: Google Sheets
-
-## Framer-API Integration
-
-### User Flow & API Integration Points
-
-#### Step 1: Customer Information
-- Collect customer name
-- Store in Framer state for next steps
-- No API call required
-
-#### Step 2: Contact & Address
-- Collect: phone, email, address
-- API Endpoint: `POST /api/lot-size`
-  ```json
-  {
-    "address": "string",
-    "name": "string",
-    "email": "string",
-    "phone": "string"
-  }
-  ```
-- Response: `{ "lot_size": number }`
-- Error Handling: Invalid address, API timeout
-
-#### Step 3: Service Selection
-- Display service dropdown
-- API Endpoint: `POST /api/calculate-price`
-  ```json
-  {
-    "lot_size": number,
-    "service": string
-  }
-  ```
-- Response: `{ "price": number }`
-
-#### Step 4: Payment Processing
-- API Endpoint: `POST /api/create-payment`
-  ```json
-  {
-    "amount": number,
-    "customer": {
-      "name": "string",
-      "email": "string",
-      "phone": "string",
-      "address": "string"
-    },
-    "service": "string"
-  }
-  ```
-- Response: `{ "clientSecret": string }`
-- Implement Stripe Elements for secure payment
-- Success/failure handling and Google Sheets update
-
-### API Error Handling
-- Network timeout: Retry with exponential backoff
-- Invalid input: Clear validation messages
-- API errors: User-friendly error messages
-- Payment failures: Detailed error feedback
-
-### Loading States
-- Address validation: "Calculating lot size..."
-- Price calculation: "Calculating quote..."
-- Payment processing: "Processing payment..."
-
-### Data Flow
-1. Store user inputs in Framer state
-2. Pass complete data object between steps
-3. Validate all required fields before API calls
-4. Maintain error state for proper user feedback
+## Notes
+- Currently using a default lot size of 5000 sq ft
+- Base price calculation: $30 base + ($0.01 * lot size)
+- Service discounts:
+  - Weekly: 30% off base price
+  - Bi-Weekly: 20% off base price
+  - Monthly/One-time: No discount
+- All components working in Framer
+- Successfully resolved state management issues
 
 ## Deployment
 - [x] Backend API deployed on Render (lawn-peak-api)

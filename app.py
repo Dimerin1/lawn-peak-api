@@ -212,9 +212,44 @@ def get_lot_size(address):
     lat = location['lat']
     lng = location['lng']
     
-    # For this example, we'll return a mock lot size
-    # In production, you would use the coordinates to get the actual lot size
-    return 5000  # Mock value in square feet
+    # Get place details to find the property area
+    place_url = f'https://maps.googleapis.com/maps/api/place/details/json?place_id={result["results"][0]["place_id"]}&fields=geometry&key={api_key}'
+    place_response = requests.get(place_url)
+    place_result = place_response.json()
+    
+    if place_result['status'] != 'OK':
+        return None
+    
+    # Calculate approximate lot size from viewport
+    viewport = place_result['result']['geometry']['viewport']
+    ne = viewport['northeast']
+    sw = viewport['southwest']
+    
+    # Calculate width and height in meters
+    from math import radians, cos, sin, asin, sqrt
+    
+    def haversine(lat1, lon1, lat2, lon2):
+        R = 6371000  # Earth radius in meters
+        
+        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        
+        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+        c = 2 * asin(sqrt(a))
+        return R * c
+    
+    width = haversine(ne['lat'], sw['lng'], ne['lat'], ne['lng'])
+    height = haversine(ne['lat'], sw['lng'], sw['lat'], sw['lng'])
+    
+    # Convert square meters to square feet
+    lot_size = width * height * 10.764
+    
+    # Apply some reasonable constraints
+    min_size = 1000  # Minimum lot size in sq ft
+    max_size = 43560  # Maximum lot size (1 acre) in sq ft
+    
+    return max(min(round(lot_size), max_size), min_size)
 
 def calculate_price(lot_size):
     # Base price calculation
