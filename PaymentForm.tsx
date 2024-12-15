@@ -1,6 +1,5 @@
 import { addPropertyControls, ControlType } from "framer"
 import * as React from "react"
-import { loadStripe } from '@stripe/stripe-js';
 
 interface PaymentFormProps {
     onSuccess?: () => void
@@ -13,8 +12,12 @@ const SERVICES: { [key: string]: { name: string } } = {
     WEEKLY: { name: "Weekly Service" }
 };
 
-// Initialize Stripe outside of component
-const stripePromise = loadStripe('pk_test_51ONqUHFIWJQKnfxXBSWTlcKRGpvhBWRtQnxQxBTqVPxAYF3IkXlPHbOJBHQIxULhsqOQRXhTPTz8F8UbNrE7KtGD00yrTDUQbR');
+// Initialize Stripe dynamically
+const getStripe = async () => {
+    if (typeof window === 'undefined') return null;
+    const { loadStripe } = await import('@stripe/stripe-js');
+    return loadStripe('pk_test_51ONqUHFIWJQKnfxXBSWTlcKRGpvhBWRtQnxQxBTqVPxAYF3IkXlPHbOJBHQIxULhsqOQRXhTPTz8F8UbNrE7KtGD00yrTDUQbR');
+};
 
 export function PaymentForm({ onSuccess, onBack }: PaymentFormProps) {
     const [isProcessing, setIsProcessing] = React.useState(false);
@@ -54,7 +57,7 @@ export function PaymentForm({ onSuccess, onBack }: PaymentFormProps) {
         setError("");
 
         try {
-            const stripe = await stripePromise;
+            const stripe = await getStripe();
             if (!stripe) throw new Error('Failed to load Stripe');
 
             // Create payment intent
