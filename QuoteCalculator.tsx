@@ -1,9 +1,5 @@
 import * as React from "react"
 import { addPropertyControls, ControlType } from "framer"
-import { ComponentType } from "react"
-
-// Import PaymentForm as a code component
-const PaymentForm = React.lazy(() => import("./PaymentForm")) as ComponentType<any>
 
 // Service configuration
 const SERVICES = {
@@ -74,7 +70,8 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
     const [priceDisplay, setPriceDisplay] = React.useState("")
     const [error, setError] = React.useState("")
     const [isLoading, setIsLoading] = React.useState(false)
-    const [currentStep, setCurrentStep] = React.useState(1)
+    const [isProcessingPayment, setIsProcessingPayment] = React.useState(false)
+    const [paymentError, setPaymentError] = React.useState("")
 
     const handleAddressSelect = async (address: string) => {
         setIsLoading(true)
@@ -186,123 +183,178 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         }
     };
 
+    const handlePayment = async () => {
+        setIsProcessingPayment(true)
+        setPaymentError("")
+        
+        try {
+            const response = await fetch('https://lawn-peak-api.onrender.com/create-checkout-session', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    price: formData.price,
+                    service_type: formData.service,
+                    address: formData.address,
+                    lot_size: formData.lotSize,
+                    phone: formData.phone,
+                    success_url: window.location.origin + '/success',
+                    cancel_url: window.location.origin + '/cancel'
+                })
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json()
+                throw new Error(errorData.error || 'Failed to create checkout session')
+            }
+
+            const data = await response.json()
+            
+            if (data.url) {
+                window.location.href = data.url
+            } else if (data.sessionId) {
+                window.location.href = `https://checkout.stripe.com/pay/${data.sessionId}`
+            } else {
+                throw new Error('No checkout URL received')
+            }
+        } catch (err) {
+            console.error('Payment error:', err)
+            setPaymentError(err.message || 'Failed to initiate payment. Please try again.')
+        } finally {
+            setIsProcessingPayment(false)
+        }
+    }
+
     return (
         <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "16px" }}>
-            {currentStep === 1 && (
+            <form onSubmit={(e) => e.preventDefault()}>
+                <AddressInput
+                    value={formData.address}
+                    onChange={(value) => setFormData(prev => ({ ...prev, address: value }))}
+                    onSelect={handleAddressSelect}
+                    style={{
+                        input: inputStyle
+                    }}
+                />
+
+                <select
+                    value={formData.lotSize}
+                    onChange={handleLotSizeChange}
+                    style={{ ...selectStyle, marginTop: "16px" }}
+                >
+                    <option value="" style={{ color: "#999999" }}>Select Lot Size</option>
+                    {lotSizeOptions.map(option => (
+                        <option key={option.value} value={option.value} style={{ color: "#999999" }}>
+                            {option.label}
+                        </option>
+                    ))}
+                </select>
+
+                <select 
+                    value={formData.service}
+                    onChange={handleServiceChange}
+                    style={{ ...selectStyle, marginTop: "16px" }}
+                >
+                    <option value="" style={{ color: "#999999" }}>Select a service frequency...</option>
+                    {Object.entries(SERVICES).map(([value, service]) => (
+                        <option key={value} value={value} style={{ color: "#999999" }}>
+                            {service.name}
+                        </option>
+                    ))}
+                </select>
+
+                <input
+                    type="tel"
+                    placeholder="Phone number"
+                    value={formData.phone}
+                    onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                    style={{ ...inputStyle, marginTop: "16px" }}
+                />
+            </form>
+
+            {error && (
+                <div style={{
+                    color: "#e53e3e",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    backgroundColor: "rgba(229, 62, 62, 0.1)",
+                    marginTop: "8px",
+                    fontSize: "14px",
+                    animation: "fadeIn 0.3s ease-out"
+                }}>
+                    {error}
+                </div>
+            )}
+
+            {isLoading ? (
+                <div style={{
+                    textAlign: "center",
+                    padding: "16px",
+                    color: "#718096"
+                }}>
+                    Calculating price...
+                </div>
+            ) : formData.price && !isLoading && (
                 <>
-                    <AddressInput
-                        value={formData.address}
-                        onChange={(value) => setFormData(prev => ({ ...prev, address: value }))}
-                        onSelect={handleAddressSelect}
-                        style={{
-                            input: inputStyle
-                        }}
-                    />
-
-                    <select
-                        value={formData.lotSize}
-                        onChange={handleLotSizeChange}
-                        style={selectStyle}
-                    >
-                        <option value="" style={{ color: "#999999" }}>Select Lot Size</option>
-                        {lotSizeOptions.map(option => (
-                            <option key={option.value} value={option.value} style={{ color: "#999999" }}>
-                                {option.label}
-                            </option>
-                        ))}
-                    </select>
-
-                    <select 
-                        value={formData.service}
-                        onChange={handleServiceChange}
-                        style={selectStyle}
-                    >
-                        <option value="" style={{ color: "#999999" }}>Select a service frequency...</option>
-                        {Object.entries(SERVICES).map(([value, service]) => (
-                            <option key={value} value={value} style={{ color: "#999999" }}>
-                                {service.name}
-                            </option>
-                        ))}
-                    </select>
-
-                    <input
-                        type="tel"
-                        placeholder="Phone number"
-                        value={formData.phone}
-                        onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                        style={inputStyle}
-                    />
-
-                    {error && (
-                        <div style={{
-                            color: "#e53e3e",
-                            padding: "12px",
-                            borderRadius: "8px",
-                            backgroundColor: "rgba(229, 62, 62, 0.1)",
-                            marginTop: "8px",
-                            fontSize: "14px",
-                            animation: "fadeIn 0.3s ease-out"
-                        }}>
-                            {error}
-                        </div>
-                    )}
-
-                    {isLoading ? (
-                        <div style={{
-                            textAlign: "center",
-                            padding: "16px",
-                            color: "#718096"
-                        }}>
-                            Calculating price...
-                        </div>
-                    ) : formData.price && !isLoading && (
-                        <div className="price-container">
-                            <div className="price-title">Estimated Price</div>
-                            <div className="price-amount">${formData.price}</div>
-                            {(formData.service === 'WEEKLY' || formData.service === 'BI_WEEKLY') && (
-                                <div className="savings-badge">
-                                    Save {formData.service === 'WEEKLY' ? '25%' : '15%'}
+                    <div className="price-container">
+                        <div className="price-title">Estimated Price</div>
+                        <div className="price-amount">${formData.price}</div>
+                        {(formData.service === 'WEEKLY' || formData.service === 'BI_WEEKLY') && (
+                            <div className="savings-badge">
+                                Save {formData.service === 'WEEKLY' ? '25%' : '15%'}
+                            </div>
+                        )}
+                    </div>
+                    
+                    {formData.address && formData.lotSize && formData.service && formData.phone ? (
+                        <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <button
+                                onClick={handlePayment}
+                                disabled={isProcessingPayment}
+                                style={{
+                                    width: "100%",
+                                    padding: "16px",
+                                    backgroundColor: "#FFC043",
+                                    border: "none",
+                                    borderRadius: "12px",
+                                    color: "#000",
+                                    fontSize: "16px",
+                                    fontWeight: "500",
+                                    cursor: isProcessingPayment ? "not-allowed" : "pointer",
+                                    opacity: isProcessingPayment ? 0.7 : 1,
+                                }}
+                            >
+                                {isProcessingPayment ? "Processing..." : "Proceed to Payment"}
+                            </button>
+                            
+                            {paymentError && (
+                                <div style={{
+                                    color: "#e53e3e",
+                                    padding: "12px",
+                                    borderRadius: "8px",
+                                    backgroundColor: "rgba(229, 62, 62, 0.1)",
+                                    marginTop: "8px",
+                                    fontSize: "14px"
+                                }}>
+                                    {paymentError}
                                 </div>
                             )}
                         </div>
+                    ) : (
+                        <div style={{
+                            color: "#718096",
+                            padding: "12px",
+                            borderRadius: "8px",
+                            backgroundColor: "rgba(113, 128, 150, 0.1)",
+                            marginTop: "8px",
+                            fontSize: "14px",
+                            textAlign: "center"
+                        }}>
+                            Fill in all fields above to proceed with payment
+                        </div>
                     )}
-
-                    <button
-                        onClick={() => {
-                            if (formData.address && formData.lotSize && formData.service && formData.phone) {
-                                setCurrentStep(2);
-                            } else {
-                                setError("Please fill in all fields");
-                            }
-                        }}
-                        style={{
-                            width: "100%",
-                            padding: "16px",
-                            backgroundColor: "#FFC043",
-                            border: "none",
-                            borderRadius: "12px",
-                            color: "#000",
-                            fontSize: "16px",
-                            fontWeight: "500",
-                            cursor: "pointer",
-                            marginTop: "16px"
-                        }}
-                    >
-                        Next step
-                    </button>
                 </>
-            )}
-
-            {currentStep === 2 && (
-                <React.Suspense fallback={<div>Loading...</div>}>
-                    <PaymentForm
-                        price={formData.price}
-                        service_type={formData.service}
-                        address={formData.address}
-                        lot_size={formData.lotSize}
-                        phone={formData.phone}
-                    />
-                </React.Suspense>
             )}
 
             <style>
