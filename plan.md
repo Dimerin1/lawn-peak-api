@@ -38,48 +38,6 @@ A complete solution for integrating address-based quotes and Stripe payment proc
 
 ## Progress Update (Dec 15, 2024)
 
-### Latest Changes
-- Modified payment flow to use pre-authorization instead of immediate charging
-- Implemented Stripe SetupIntent for secure card storage
-- Added backend endpoints for delayed payment capture
-- Updated UI to reflect the new payment flow
-
-### Current Status
-- QuoteCalculator now handles pre-authorization flow
-- Card details are securely stored with Stripe
-- Admin can capture payments after service completion
-- Clear user communication about delayed charging
-
-### Payment Flow
-1. Customer fills out service details
-2. Customer saves payment method (no charge)
-3. Service is performed
-4. Admin captures payment through backend API
-
-### Technical Implementation
-- Using Stripe SetupIntent for card storage
-- Customer ID stored for later payment capture
-- Secure backend endpoints for payment processing
-- Clear error handling and user feedback
-
-### Next Steps
-1. Create admin dashboard for:
-   - Viewing pending jobs
-   - Capturing payments after service
-   - Managing customer information
-2. Add email notifications for:
-   - Payment method saved
-   - Service scheduled
-   - Payment captured
-3. Implement success/cancel pages for payment method setup
-4. Add automated testing for new payment flow
-
-### Security Measures
-- No sensitive card data stored locally
-- All payment information securely stored with Stripe
-- Customer authentication for payment capture
-- Secure admin access for payment processing
-
 ### Completed Tasks
 - [x] Set up Flask backend with Stripe integration
 - [x] Created QuoteCalculator with address input and price calculation
