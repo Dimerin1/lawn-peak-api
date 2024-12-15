@@ -83,17 +83,19 @@ export function withAddressInput(): Override {
 export function withServiceSelect(): Override {
     return {
         onChange: async event => {
-            const selectedService = event.target.value
-            formData.service = selectedService
-            console.log("Service selected:", selectedService)
-            console.log("Current lot size:", formData.lotSize)
-
             try {
+                const selectedService = event.target.value
+                formData.service = selectedService
+                console.log("Service selected:", selectedService)
+
                 if (!formData.lotSize) {
-                    console.error("Lot size is missing")
-                    throw new Error("Please enter your address first to calculate the lot size")
+                    const error = new Error("Please enter your address first to calculate the lot size")
+                    console.error(error.message)
+                    updatePriceDisplay(error.message)
+                    return
                 }
 
+                console.log("Calculating price with lot size:", formData.lotSize)
                 const requestBody = {
                     lot_size: formData.lotSize,
                     service: selectedService
@@ -110,30 +112,36 @@ export function withServiceSelect(): Override {
                     body: JSON.stringify(requestBody)
                 })
 
-                if (!response.ok) {
-                    const errorText = await response.text()
-                    console.error("Price calculation error response:", errorText)
-                    throw new Error(`Failed to calculate price: ${errorText}`)
+                let data
+                const responseText = await response.text()
+                console.log("Raw response:", responseText)
+
+                try {
+                    data = JSON.parse(responseText)
+                } catch (e) {
+                    console.error("Failed to parse response:", e)
+                    throw new Error("Invalid response from server")
                 }
 
-                const data = await response.json()
+                if (!response.ok) {
+                    throw new Error(data.error || "Failed to calculate price")
+                }
+
                 formData.price = data.price
                 console.log("Price calculated:", formData.price)
-
-                // Update price display if it exists
-                const priceDisplay = document.querySelector("[data-framer-name='PriceDisplay']")
-                if (priceDisplay) {
-                    priceDisplay.textContent = `$${formData.price}`
-                }
+                updatePriceDisplay(`$${formData.price}`)
             } catch (error) {
                 console.error("Error in price calculation:", error)
-                const priceDisplay = document.querySelector("[data-framer-name='PriceDisplay']")
-                if (priceDisplay) {
-                    priceDisplay.textContent = error.message || "Error calculating price"
-                }
-                throw error
+                updatePriceDisplay(error.message || "Error calculating price")
             }
         },
+    }
+}
+
+function updatePriceDisplay(text: string) {
+    const priceDisplay = document.querySelector("[data-framer-name='PriceDisplay']")
+    if (priceDisplay) {
+        priceDisplay.textContent = text
     }
 }
 
