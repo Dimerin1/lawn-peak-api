@@ -183,12 +183,12 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         }
     };
 
-    const handlePayment = async () => {
+    const handlePaymentSetup = async () => {
         setIsProcessingPayment(true)
         setPaymentError("")
         
         try {
-            const response = await fetch('https://lawn-peak-api.onrender.com/create-checkout-session', {
+            const response = await fetch('https://lawn-peak-api.onrender.com/create-setup-intent', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -198,29 +198,25 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     service_type: formData.service,
                     address: formData.address,
                     lot_size: formData.lotSize,
-                    phone: formData.phone,
-                    success_url: window.location.origin + '/success',
-                    cancel_url: window.location.origin + '/cancel'
+                    phone: formData.phone
                 })
             })
 
             if (!response.ok) {
                 const errorData = await response.json()
-                throw new Error(errorData.error || 'Failed to create checkout session')
+                throw new Error(errorData.error || 'Failed to set up payment method')
             }
 
             const data = await response.json()
             
-            if (data.url) {
-                window.location.href = data.url
-            } else if (data.sessionId) {
-                window.location.href = `https://checkout.stripe.com/pay/${data.sessionId}`
-            } else {
-                throw new Error('No checkout URL received')
-            }
+            // Store customer ID in localStorage for later use
+            localStorage.setItem('lawn_peak_customer_id', data.customerId)
+            
+            // Redirect to Stripe's hosted payment method setup page
+            window.location.href = `https://checkout.stripe.com/setup/${data.clientSecret}`
         } catch (err) {
-            console.error('Payment error:', err)
-            setPaymentError(err.message || 'Failed to initiate payment. Please try again.')
+            console.error('Payment setup error:', err)
+            setPaymentError(err.message || 'Failed to set up payment method. Please try again.')
         } finally {
             setIsProcessingPayment(false)
         }
@@ -310,7 +306,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     {formData.address && formData.lotSize && formData.service && formData.phone ? (
                         <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "16px" }}>
                             <button
-                                onClick={handlePayment}
+                                onClick={handlePaymentSetup}
                                 disabled={isProcessingPayment}
                                 style={{
                                     width: "100%",
@@ -325,8 +321,17 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                                     opacity: isProcessingPayment ? 0.7 : 1,
                                 }}
                             >
-                                {isProcessingPayment ? "Processing..." : "Proceed to Payment"}
+                                {isProcessingPayment ? "Processing..." : "Save Payment Method"}
                             </button>
+                            
+                            <div style={{
+                                textAlign: "center",
+                                color: "#718096",
+                                fontSize: "14px",
+                                marginTop: "8px"
+                            }}>
+                                Your card will not be charged until after the service is completed
+                            </div>
                             
                             {paymentError && (
                                 <div style={{
