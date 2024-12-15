@@ -42,43 +42,18 @@ function QuoteCalculator() {
     const [error, setError] = React.useState("")
     const [isLoading, setIsLoading] = React.useState(false)
 
-    const handleAddressSelect = async (data) => {
+    const handleAddressSelect = async (address: string) => {
+        setIsLoading(true)
         try {
-            setIsLoading(true)
-            setError("")
-            
-            // Make API call to get lot size
-            const response = await fetch('https://lawn-peak-api.onrender.com/api/quote', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    address: data.address
-                })
-            })
-            
-            if (!response.ok) {
-                throw new Error('Failed to get lot size')
-            }
-            
-            const result = await response.json()
-            
             setFormData(prev => ({
                 ...prev,
-                address: data.address,
-                lotSize: result.lot_size_range
+                address
             }))
-            
-            // Reset price display when address changes
-            if (formData.service) {
-                getQuote(formData.lotSize, formData.service)
-            }
         } catch (err) {
-            setError(err.message || "Error getting lot size")
+            setError(err.message || "Error with address selection")
             setFormData(prev => ({
                 ...prev,
-                lotSize: ""
+                address: ""
             }))
         } finally {
             setIsLoading(false)
@@ -310,10 +285,7 @@ function AddressInput({ onAddressSelect, error, isLoading }) {
                     }
 
                     setAddress(place.formatted_address)
-                    onAddressSelect({
-                        address: place.formatted_address,
-                        lotSize: 5000 // Default lot size in sq ft
-                    })
+                    onAddressSelect(place.formatted_address)
                 } catch (err) {
                     setAddressError(err.message || "Error selecting address")
                 } finally {

@@ -1,51 +1,96 @@
 import * as React from "react"
 import { addPropertyControls, ControlType } from "framer"
 
-export function AddressInput(props) {
-    const [address, setAddress] = React.useState("")
-    const [suggestions, setSuggestions] = React.useState([])
+export function AddressInput({ value, onChange, onSelect }) {
+    const [address, setAddress] = React.useState(value || "")
+    const [addressError, setAddressError] = React.useState("")
+    const [isLoading, setIsLoading] = React.useState(false)
+    const autocompleteRef = React.useRef(null)
 
-    const handleAddressChange = (e) => {
-        const value = e.target.value
-        setAddress(value)
-        console.log("Address changed:", value)
-        
-        // Here we'll add Google Places API integration later
-        if (props.onAddressChange) {
-            props.onAddressChange(value)
+    React.useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const autocomplete = new google.maps.places.Autocomplete(
+                autocompleteRef.current,
+                { types: ['address'], componentRestrictions: { country: 'us' } }
+            )
+
+            autocomplete.addListener('place_changed', async () => {
+                setIsLoading(true)
+                setAddressError("")
+                
+                try {
+                    const place = autocomplete.getPlace()
+                    if (!place.formatted_address) {
+                        throw new Error("Please select a valid address")
+                    }
+
+                    setAddress(place.formatted_address)
+                    onSelect(place.formatted_address)
+                } catch (err) {
+                    setAddressError(err.message || "Error selecting address")
+                } finally {
+                    setIsLoading(false)
+                }
+            })
         }
-    }
+    }, [onSelect])
 
     return (
         <div style={{ width: "100%" }}>
             <input
+                ref={autocompleteRef}
                 type="text"
                 value={address}
-                onChange={handleAddressChange}
-                placeholder={props.placeholder || "Enter your address..."}
+                onChange={(e) => {
+                    setAddress(e.target.value)
+                    onChange(e.target.value)
+                }}
+                placeholder="Enter your address"
                 style={{
                     width: "100%",
-                    padding: "12px",
+                    height: "60px",
+                    padding: "12px 16px",
                     fontSize: "16px",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "8px",
-                    backgroundColor: "#fff",
-                    outline: "none",
+                    lineHeight: "1.2",
+                    fontFamily: "Be Vietnam Pro",
+                    fontWeight: "400",
+                    color: "#999999",
+                    backgroundColor: "rgba(187, 187, 187, 0.15)",
+                    border: "none",
+                    borderRadius: "12px",
+                    outline: "none"
                 }}
+                disabled={isLoading}
             />
+            {addressError && (
+                <div style={{ color: "#e53e3e", marginTop: "8px", fontSize: "14px" }}>
+                    {addressError}
+                </div>
+            )}
         </div>
     )
 }
 
 AddressInput.defaultProps = {
-    placeholder: "Enter your address...",
-    onAddressChange: () => {},
+    value: "",
+    onChange: () => {},
+    onSelect: () => {},
 }
 
 addPropertyControls(AddressInput, {
-    placeholder: {
+    value: {
         type: ControlType.String,
-        title: "Placeholder",
-        defaultValue: "Enter your address...",
+        title: "Value",
+        defaultValue: "",
+    },
+    onChange: {
+        type: ControlType.Function,
+        title: "On Change",
+        defaultValue: () => {},
+    },
+    onSelect: {
+        type: ControlType.Function,
+        title: "On Select",
+        defaultValue: () => {},
     },
 })
