@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect
 from flask_cors import CORS
 import os
 from dotenv import load_dotenv
@@ -30,6 +30,53 @@ stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 @app.route('/')
 def home():
     return jsonify({"status": "API is running"})
+
+@app.route('/checkout')
+def checkout():
+    try:
+        # Get parameters from URL
+        price = request.args.get('price')
+        service_type = request.args.get('service_type')
+        address = request.args.get('address')
+        lot_size = request.args.get('lot_size')
+        success_url = request.args.get('success_url')
+        cancel_url = request.args.get('cancel_url')
+        
+        if not all([price, service_type, address, lot_size, success_url, cancel_url]):
+            return jsonify({'error': 'Missing required parameters'}), 400
+
+        # Create Stripe checkout session
+        checkout_session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'usd',
+                    'unit_amount': int(price),  # Already in cents
+                    'product_data': {
+                        'name': f'Lawn Mowing Service - {service_type}',
+                        'description': f'Address: {address}\nLot Size: {lot_size}',
+                    },
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url=success_url,
+            cancel_url=cancel_url,
+            metadata={
+                'service_type': service_type,
+                'address': address,
+                'lot_size': lot_size
+            }
+        )
+        
+        # Redirect to Stripe Checkout
+        return redirect(checkout_session.url)
+
+    except stripe.error.StripeError as e:
+        return jsonify({'error': str(e.user_message)}), 400
+    except Exception as e:
+        print('Error creating checkout session:', str(e))
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 @app.route('/create-payment-intent', methods=['POST'])
 def create_payment_intent():
