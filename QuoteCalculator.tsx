@@ -16,6 +16,13 @@ const lotSizeRanges = {
     'XLARGE': 'Extra Large (over 15,000 sq ft)'
 };
 
+const lotSizeOptions = [
+    { value: 'SMALL', label: 'Small (up to 5,000 sq ft)' },
+    { value: 'MEDIUM', label: 'Medium (5,000 - 9,000 sq ft)' },
+    { value: 'LARGE', label: 'Large (9,000 - 11,000 sq ft)' },
+    { value: 'XLARGE', label: 'Extra Large (over 11,000 sq ft)' }
+];
+
 const serviceTypes = [
     { value: 'ONE_TIME', label: 'One-time mowing' },
     { value: 'MONTHLY', label: 'Monthly mowing' },
@@ -26,9 +33,9 @@ const serviceTypes = [
 function QuoteCalculator() {
     const [formData, setFormData] = React.useState({
         address: "",
-        lotSize: 0,
-        service: "",
-        price: 0,
+        lotSize: "",  
+        service: "one_time",
+        price: null,
         recurring: false
     })
     const [priceDisplay, setPriceDisplay] = React.useState("")
@@ -60,38 +67,40 @@ function QuoteCalculator() {
             setFormData(prev => ({
                 ...prev,
                 address: data.address,
-                lotSize: result.lot_size
+                lotSize: result.lot_size_range
             }))
             
             // Reset price display when address changes
             if (formData.service) {
-                handleServiceSelect(formData.service)
+                getQuote(formData.lotSize, formData.service)
             }
         } catch (err) {
             setError(err.message || "Error getting lot size")
             setFormData(prev => ({
                 ...prev,
-                lotSize: 0
+                lotSize: ""
             }))
         } finally {
             setIsLoading(false)
         }
     }
 
-    const calculatePrice = (lotSize: number, service: string) => {
-        if (lotSize <= 0) {
+    const calculatePrice = (lotSize: string, service: string) => {
+        if (!lotSize) {
             throw new Error("Invalid lot size")
         }
         
         // New pricing tiers based on lot size
         let basePrice = 40; // Minimum price
         
-        if (lotSize <= 5000) {
-            basePrice += lotSize * 0.008;
-        } else if (lotSize <= 10000) {
-            basePrice += (5000 * 0.008) + ((lotSize - 5000) * 0.006);
+        if (lotSize === 'SMALL') {
+            basePrice += 5000 * 0.008;
+        } else if (lotSize === 'MEDIUM') {
+            basePrice += (5000 * 0.008) + (4000 * 0.006);
+        } else if (lotSize === 'LARGE') {
+            basePrice += (5000 * 0.008) + (4000 * 0.006) + (2000 * 0.004);
         } else {
-            basePrice += (5000 * 0.008) + (5000 * 0.006) + ((lotSize - 10000) * 0.004);
+            basePrice += (5000 * 0.008) + (4000 * 0.006) + (2000 * 0.004) + (10000 * 0.002);
         }
         
         // Apply discount if applicable
@@ -109,6 +118,16 @@ function QuoteCalculator() {
         return price
     }
 
+    const handleLotSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        setFormData(prev => ({
+            ...prev,
+            lotSize: e.target.value
+        }));
+        if (formData.service) {
+            getQuote(e.target.value, formData.service);
+        }
+    };
+
     const handleServiceSelect = async (service) => {
         try {
             setIsLoading(true)
@@ -120,26 +139,13 @@ function QuoteCalculator() {
                 return
             }
 
-            const calculatedPrice = calculatePrice(formData.lotSize, service)
-            const serviceConfig = SERVICES[service]
-            
             setFormData(prev => ({
                 ...prev,
                 service,
-                price: calculatedPrice,
                 recurring: service !== 'one_time'
             }))
 
-            let displayText = `$${calculatedPrice}`
-            if (serviceConfig && serviceConfig.discount > 0) {
-                const regularPrice = calculatePrice(formData.lotSize, 'one_time')
-                displayText += ` (${Math.round(serviceConfig.discount * 100)}% off $${regularPrice})`
-            }
-            if (service !== 'one_time') {
-                displayText += ' per service'
-            }
-            
-            setPriceDisplay(displayText)
+            getQuote(formData.lotSize, service)
         } catch (err) {
             setError(err.message || "Error calculating price")
             setPriceDisplay("")
@@ -147,6 +153,37 @@ function QuoteCalculator() {
             setIsLoading(false)
         }
     }
+
+    const getQuote = async (lotSize: string, service: string) => {
+        setIsLoading(true);
+        try {
+            const response = await fetch('https://lawn-peak-api.onrender.com/api/quote', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    lot_size_range: lotSize,
+                    service_type: service.toUpperCase()
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to get quote');
+            }
+
+            const data = await response.json();
+            setFormData(prev => ({
+                ...prev,
+                price: data.price
+            }));
+            setPriceDisplay(`$${data.price}`);
+        } catch (error) {
+            console.error('Error:', error);
+            setError('Failed to get quote. Please try again.');
+        }
+        setIsLoading(false);
+    };
 
     const handleQuoteResponse = (data: any) => {
         setFormData(prev => ({
@@ -165,10 +202,52 @@ function QuoteCalculator() {
                 error={error}
                 isLoading={isLoading}
             />
-            <ServiceSelect 
-                onServiceSelect={handleServiceSelect}
-                disabled={!formData.address || isLoading}
-            />
+            
+            {/* Add Lot Size Dropdown */}
+            <select
+                value={formData.lotSize}
+                onChange={handleLotSizeChange}
+                style={{
+                    width: "100%",
+                    padding: "12px",
+                    fontSize: "16px",
+                    border: "1px solid #ccc",
+                    borderRadius: "4px",
+                    backgroundColor: "white"
+                }}
+            >
+                <option value="">Select Lot Size</option>
+                {lotSizeOptions.map(option => (
+                    <option key={option.value} value={option.value}>
+                        {option.label}
+                    </option>
+                ))}
+            </select>
+
+            <select 
+                value={formData.service}
+                onChange={(e) => {
+                    setFormData(prev => ({ ...prev, service: e.target.value }));
+                    if (formData.lotSize) {
+                        getQuote(formData.lotSize, e.target.value);
+                    }
+                }}
+                style={{
+                    width: "100%",
+                    padding: "12px",
+                    fontSize: "16px",
+                    border: "1px solid #ccc",
+                    borderRadius: "4px",
+                    backgroundColor: "white"
+                }}
+            >
+                <option value="">Select a service frequency...</option>
+                {Object.entries(SERVICES).map(([value, service]) => (
+                    <option key={value} value={value} style={{ padding: "8px" }}>
+                        {service.name}
+                    </option>
+                ))}
+            </select>
             {error && (
                 <div style={{ 
                     color: "#e53e3e", 
@@ -199,16 +278,6 @@ function QuoteCalculator() {
                     padding: "16px"
                 }}>
                     {priceDisplay}
-                </div>
-            )}
-            {formData.lotSizeRange && (
-                <div style={{ 
-                    fontSize: "18px", 
-                    fontWeight: "bold",
-                    textAlign: "center",
-                    padding: "16px"
-                }}>
-                    Lot Size Range: {formData.lotSizeRange}
                 </div>
             )}
         </div>
@@ -303,43 +372,6 @@ function AddressInput({ onAddressSelect, error, isLoading }) {
                 </div>
             )}
         </div>
-    )
-}
-
-function ServiceSelect({ onServiceSelect, disabled }) {
-    return (
-        <select 
-            onChange={(e) => onServiceSelect(e.target.value)}
-            disabled={disabled}
-            style={{
-                width: "100%",
-                height: "60px",
-                padding: "12px 16px",
-                fontSize: "16px",
-                lineHeight: "1.2",
-                fontFamily: "Be Vietnam Pro",
-                fontWeight: "400",
-                color: "#999999",
-                backgroundColor: "rgba(187, 187, 187, 0.15)",
-                border: "none",
-                borderRadius: "12px",
-                outline: "none",
-                cursor: disabled ? "not-allowed" : "pointer",
-                appearance: "none",
-                backgroundImage: `url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23999999%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")`,
-                backgroundRepeat: "no-repeat",
-                backgroundPosition: "right 16px top 50%",
-                backgroundSize: "12px auto",
-                paddingRight: "48px"
-            }}
-        >
-            <option value="">Select a service frequency...</option>
-            {Object.entries(SERVICES).map(([value, service]) => (
-                <option key={value} value={value} style={{ padding: "8px" }}>
-                    {service.name}
-                </option>
-            ))}
-        </select>
     )
 }
 

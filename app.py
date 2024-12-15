@@ -34,20 +34,16 @@ def home():
 @app.route('/api/quote', methods=['POST'])
 def get_quote():
     data = request.get_json()
-    address = data.get('address')
+    lot_size_range = data.get('lot_size_range')
     service_type = data.get('service_type', 'ONE_TIME')
     
     try:
-        # Get lot size range instead of exact size
-        lot_size = get_lot_size(address)
-        if lot_size is None:
-            return jsonify({'error': 'Could not determine lot size'}), 400
+        if not lot_size_range:
+            return jsonify({'error': 'Lot size range is required'}), 400
             
-        lot_size_range = get_lot_size_range(lot_size)
         price = calculate_price(lot_size_range, service_type)
         
         return jsonify({
-            'address': address,
             'lot_size_range': lot_size_range,
             'price': price
         })
@@ -280,6 +276,12 @@ def calculate_price(lot_size_range, service_type='ONE_TIME'):
         'BI_WEEKLY': 0.85,    # 15% discount
         'WEEKLY': 0.75        # 25% discount
     }
+    
+    if lot_size_range not in base_prices:
+        raise ValueError(f'Invalid lot size range: {lot_size_range}')
+        
+    if service_type not in discounts:
+        raise ValueError(f'Invalid service type: {service_type}')
     
     base_price = base_prices[lot_size_range]
     final_price = base_price * discounts[service_type]
