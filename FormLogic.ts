@@ -2,16 +2,38 @@ import { Override } from "framer"
 
 const API_URL = "https://lawn-peak-api.onrender.com"
 
-// Form data state
+// Initialize form data
 const formData = {
-    name: "",
-    email: "",
-    phone: "",
-    address: "",
-    service: "",
-    price: 0,
+    name: '',
+    phone: '',
+    email: '',
+    address: '',
     lotSize: 0,
+    service: '',
+    price: 0,
+    clientSecret: ''
 }
+
+// Initialize Stripe only when needed
+let stripe: any = null;
+let elements: any = null;
+
+async function initializeStripe() {
+    if (!stripe) {
+        stripe = await loadStripe('pk_test_51OPwkqJR3YXWVEFxwsqxL8Y4WbPxgLHxDpQGwFxPVtpxBVNCwkQzbtLKxPUzlHWBELHbkWxXTLRPWfbFGHmV4Ygx00jrJYHRsD');
+    }
+    return stripe;
+}
+
+async function initializeElements() {
+    if (!elements) {
+        const stripe = await initializeStripe();
+        elements = stripe.elements();
+    }
+    return elements;
+}
+
+// Form data state
 
 // Step 1: Name Input
 export function withNameInput(): Override {
@@ -142,6 +164,79 @@ function updatePriceDisplay(text: string) {
     const priceDisplay = document.querySelector("[data-framer-name='PriceDisplay']")
     if (priceDisplay) {
         priceDisplay.textContent = text
+    }
+}
+
+// Step 4: Payment Form
+export function withPaymentForm(): Override {
+    return {
+        onLoad: async () => {
+            try {
+                if (!formData.price || !formData.service) {
+                    console.log("Price or service not set yet, skipping payment form initialization");
+                    return;
+                }
+
+                const elements = await initializeElements();
+                const paymentElement = elements.create('payment');
+                paymentElement.mount('#payment-element');
+            } catch (error) {
+                console.error("Error initializing payment form:", error);
+            }
+        }
+    }
+}
+
+// Submit payment handler
+export async function handlePaymentSubmit(event: any) {
+    event.preventDefault();
+    
+    try {
+        if (!formData.price) {
+            throw new Error("Please select a service and get a price quote first");
+        }
+
+        const stripe = await initializeStripe();
+        
+        // Create payment intent
+        const response = await fetch(`${API_URL}/api/create-payment`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'Origin': 'https://fabulous-screenshot-716470.framer.app'
+            },
+            body: JSON.stringify({
+                amount: formData.price * 100, // Convert to cents
+                service: formData.service,
+                customer: {
+                    name: formData.name,
+                    email: formData.email,
+                    phone: formData.phone,
+                    address: formData.address
+                }
+            })
+        });
+
+        const { clientSecret } = await response.json();
+        formData.clientSecret = clientSecret;
+
+        // Confirm payment
+        const { error } = await stripe.confirmPayment({
+            elements: await initializeElements(),
+            clientSecret,
+            confirmParams: {
+                return_url: 'https://fabulous-screenshot-716470.framer.app/success',
+            },
+        });
+
+        if (error) {
+            throw error;
+        }
+    } catch (error) {
+        console.error("Payment error:", error);
+        const message = error.message || "An error occurred during payment";
+        alert(message);
     }
 }
 

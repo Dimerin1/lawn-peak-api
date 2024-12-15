@@ -9,24 +9,22 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 
-# Load environment variables
-load_dotenv()
-
 app = Flask(__name__)
+
+# Configure CORS with specific origin
 CORS(app, resources={
     r"/api/*": {
-        "origins": [
-            "https://fabulous-screenshot-716470.framer.app",
-            "http://localhost:3000"
-        ],
+        "origins": ["https://fabulous-screenshot-716470.framer.app"],
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Accept", "Origin", "Authorization"],
-        "supports_credentials": True,
-        "max_age": 3600
+        "allow_headers": ["Content-Type", "Accept", "Origin"],
+        "supports_credentials": True
     }
 })
 
-# Initialize Stripe
+# Load environment variables
+load_dotenv()
+
+# Configure Stripe
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
 @app.route('/')
