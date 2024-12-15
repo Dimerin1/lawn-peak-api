@@ -31,30 +31,31 @@ stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 def home():
     return jsonify({"status": "API is running"})
 
-@app.route('/checkout')
-def checkout():
+@app.route('/create-checkout-session', methods=['POST'])
+def create_checkout_session():
     try:
-        # Get parameters from URL
-        price = request.args.get('price')
-        service_type = request.args.get('service_type')
-        address = request.args.get('address')
-        lot_size = request.args.get('lot_size')
-        success_url = request.args.get('success_url')
-        cancel_url = request.args.get('cancel_url')
-        
+        data = request.json
+        price = data.get('price')
+        service_type = data.get('service_type')
+        address = data.get('address')
+        lot_size = data.get('lot_size')
+        success_url = data.get('success_url')
+        cancel_url = data.get('cancel_url')
+
         if not all([price, service_type, address, lot_size, success_url, cancel_url]):
             return jsonify({'error': 'Missing required parameters'}), 400
 
-        # Create Stripe checkout session
-        checkout_session = stripe.checkout.Session.create(
+        # Create Stripe Checkout Session
+        session = stripe.checkout.Session.create(
             payment_method_types=['card'],
             line_items=[{
                 'price_data': {
                     'currency': 'usd',
-                    'unit_amount': int(price),  # Already in cents
+                    'unit_amount': int(float(price) * 100),  # Convert to cents
                     'product_data': {
                         'name': f'Lawn Mowing Service - {service_type}',
                         'description': f'Address: {address}\nLot Size: {lot_size}',
+                        'images': ['https://images.unsplash.com/photo-1592417817098-8fd3d9eb14a5?q=80&w=1000'],
                     },
                 },
                 'quantity': 1,
@@ -62,15 +63,24 @@ def checkout():
             mode='payment',
             success_url=success_url,
             cancel_url=cancel_url,
-            metadata={
-                'service_type': service_type,
-                'address': address,
-                'lot_size': lot_size
-            }
+            payment_intent_data={
+                'metadata': {
+                    'service_type': service_type,
+                    'address': address,
+                    'lot_size': lot_size
+                }
+            },
+            customer_email=None,  # Optional: Add customer email if available
+            billing_address_collection='required',
+            shipping_address_collection=None,
+            allow_promotion_codes=True,
+            locale='auto'
         )
-        
-        # Redirect to Stripe Checkout
-        return redirect(checkout_session.url)
+
+        return jsonify({
+            'sessionId': session.id,
+            'url': session.url
+        })
 
     except stripe.error.StripeError as e:
         return jsonify({'error': str(e.user_message)}), 400
