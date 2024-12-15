@@ -89,6 +89,10 @@ export function withServiceSelect(): Override {
             console.log("Service:", formData.service)
 
             try {
+                if (!formData.lotSize) {
+                    throw new Error("Please enter your address first to calculate the lot size")
+                }
+
                 const response = await fetch(`${API_URL}/api/calculate-price`, {
                     method: "POST",
                     headers: {
@@ -105,12 +109,14 @@ export function withServiceSelect(): Override {
                 })
 
                 if (!response.ok) {
-                    console.error("Server response:", await response.text())
-                    throw new Error(`Failed to calculate price: ${response.status}`)
+                    const errorText = await response.text()
+                    console.error("Server response:", errorText)
+                    throw new Error(`Failed to calculate price: ${errorText}`)
                 }
 
                 const data = await response.json()
                 formData.price = data.price
+                console.log("Price:", formData.price)
 
                 // Update price display if it exists
                 const priceDisplay = document.querySelector("[data-framer-name='PriceDisplay']")
@@ -123,6 +129,7 @@ export function withServiceSelect(): Override {
                 if (priceDisplay) {
                     priceDisplay.textContent = "Error calculating price"
                 }
+                throw error
             }
         },
     }

@@ -20,8 +20,9 @@ CORS(app, resources={
             "http://localhost:3000"
         ],
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Accept", "Origin"],
-        "supports_credentials": True
+        "allow_headers": ["Content-Type", "Accept", "Origin", "Authorization"],
+        "supports_credentials": True,
+        "max_age": 3600
     }
 })
 
