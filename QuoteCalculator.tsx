@@ -302,6 +302,17 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                                 Save {formData.service === 'WEEKLY' ? '25%' : '15%'}
                             </div>
                         )}
+                        <div style={{
+                            fontSize: "14px",
+                            color: "#4A5568",
+                            marginTop: "8px",
+                            textAlign: "center",
+                            backgroundColor: "rgba(74, 85, 104, 0.1)",
+                            padding: "8px",
+                            borderRadius: "8px"
+                        }}>
+                            You will only be charged ${formData.price} after the service is completed
+                        </div>
                     </div>
                     
                     {formData.address && formData.lotSize && formData.service && formData.phone ? (
@@ -322,7 +333,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                                     opacity: isProcessingPayment ? 0.7 : 1,
                                 }}
                             >
-                                {isProcessingPayment ? "Processing..." : "Save Payment Method"}
+                                {isProcessingPayment ? "Processing..." : "Pre-authorize Payment Method"}
                             </button>
                             
                             {paymentError && (
@@ -335,6 +346,19 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                                     fontSize: "14px"
                                 }}>
                                     {paymentError}
+                                </div>
+                            )}
+                            {!paymentError && (
+                                <div style={{
+                                    color: "#4A5568",
+                                    padding: "12px",
+                                    borderRadius: "8px",
+                                    backgroundColor: "rgba(74, 85, 104, 0.1)",
+                                    marginTop: "8px",
+                                    fontSize: "14px",
+                                    textAlign: "center"
+                                }}>
+                                    By proceeding, you agree to save your payment method. You will only be charged ${formData.price} after the service is completed.
                                 </div>
                             )}
                         </div>

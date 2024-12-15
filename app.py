@@ -120,25 +120,18 @@ def create_setup_intent():
         if not return_url:
             return jsonify({'error': 'Return URL is required'}), 400
 
-        # Create a Customer
+        # Create a Customer with metadata
         customer = stripe.Customer.create(
             metadata={
                 'service_type': data.get('service_type'),
                 'address': data.get('address'),
                 'lot_size': data.get('lot_size'),
                 'phone': data.get('phone'),
-                'price': str(data.get('price'))
+                'agreed_price': str(data.get('price'))  # Store agreed price in metadata
             }
         )
         
-        # Create Setup Intent with the customer
-        setup_intent = stripe.SetupIntent.create(
-            customer=customer.id,
-            payment_method_types=['card'],
-            usage='off_session',  # Important for later charging
-        )
-        
-        # Create a Stripe Checkout Session for setup
+        # Create a Stripe Checkout Session for setup only
         session = stripe.checkout.Session.create(
             mode='setup',
             customer=customer.id,
@@ -149,7 +142,7 @@ def create_setup_intent():
                     'address': data.get('address'),
                     'lot_size': data.get('lot_size'),
                     'phone': data.get('phone'),
-                    'price': str(data.get('price'))
+                    'agreed_price': str(data.get('price'))
                 }
             },
             success_url=return_url + '?setup=success&customer_id={CUSTOMER_ID}',
