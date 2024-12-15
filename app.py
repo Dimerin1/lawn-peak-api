@@ -278,6 +278,38 @@ def get_lot_size_endpoint():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/list-customers', methods=['GET'])
+def list_customers():
+    try:
+        # List all customers, ordered by creation date (newest first)
+        customers = stripe.Customer.list(
+            limit=100,  # Adjust this based on your needs
+            expand=['data.default_source']
+        )
+        
+        # Filter to only show customers with saved payment methods
+        valid_customers = []
+        for customer in customers.data:
+            payment_methods = stripe.PaymentMethod.list(
+                customer=customer.id,
+                type='card'
+            )
+            if payment_methods.data:
+                valid_customers.append(customer)
+
+        return jsonify({
+            'customers': [{
+                'id': customer.id,
+                'metadata': customer.metadata,
+                'created': customer.created,
+                'has_payment_method': True
+            } for customer in valid_customers]
+        })
+
+    except Exception as e:
+        print('Error listing customers:', str(e))
+        return jsonify({'error': str(e)}), 400
+
 def get_lot_size(address):
     api_key = os.getenv('GOOGLE_MAPS_API_KEY')
     if not api_key:
