@@ -12,17 +12,9 @@ const SERVICES: { [key: string]: { name: string } } = {
     WEEKLY: { name: "Weekly Service" }
 };
 
-// Initialize Stripe dynamically
-const getStripe = async () => {
-    if (typeof window === 'undefined') return null;
-    const { loadStripe } = await import('@stripe/stripe-js');
-    return loadStripe('pk_test_51ONqUHFIWJQKnfxXBSWTlcKRGpvhBWRtQnxQxBTqVPxAYF3IkXlPHbOJBHQIxULhsqOQRXhTPTz8F8UbNrE7KtGD00yrTDUQbR');
-};
-
 function PaymentForm({ onSuccess, onBack }: PaymentFormProps) {
     const [isProcessing, setIsProcessing] = React.useState(false);
     const [error, setError] = React.useState("");
-    const [paymentSuccess, setPaymentSuccess] = React.useState(false);
     const [isLoading, setIsLoading] = React.useState(true);
     const [quoteData, setQuoteData] = React.useState<{
         price: number;
@@ -39,7 +31,14 @@ function PaymentForm({ onSuccess, onBack }: PaymentFormProps) {
             if (storedQuote) {
                 setQuoteData(JSON.parse(storedQuote));
             } else {
-                setError("No quote found. Please go back and create a quote first.");
+                // For Framer preview, create mock data if no quote exists
+                setQuoteData({
+                    price: 99.99,
+                    service_type: 'ONE_TIME',
+                    lot_size: 'MEDIUM',
+                    address: '123 Main St',
+                    phone: '555-0123'
+                });
             }
         } catch (err) {
             setError("Failed to load quote data");
@@ -57,44 +56,21 @@ function PaymentForm({ onSuccess, onBack }: PaymentFormProps) {
         setError("");
 
         try {
-            const stripe = await getStripe();
-            if (!stripe) throw new Error('Failed to load Stripe');
-
-            // Create payment intent
-            const response = await fetch('https://lawn-peak.onrender.com/create-payment-intent', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    amount: quoteData.price,
-                    service_type: quoteData.service_type,
-                    address: quoteData.address,
-                    lot_size: quoteData.lot_size
-                }),
+            // Create the URL with query parameters
+            const params = new URLSearchParams({
+                price: (quoteData.price * 100).toString(), // Convert to cents
+                service_type: quoteData.service_type,
+                address: quoteData.address,
+                lot_size: quoteData.lot_size,
+                success_url: 'https://fabulous-screenshot-716470.framer.app/success',
+                cancel_url: 'https://fabulous-screenshot-716470.framer.app/quote'
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Payment failed');
-            }
-
-            const { clientSecret } = await response.json();
-
-            // Redirect to payment page
-            const { error } = await stripe.redirectToCheckout({
-                mode: 'payment',
-                clientSecret,
-                successUrl: `${window.location.origin}/success`,
-                cancelUrl: `${window.location.origin}/quote`,
-            });
-
-            if (error) throw error;
-
+            // Redirect to our backend checkout endpoint
+            window.location.href = `https://lawn-peak-api.onrender.com/checkout?${params.toString()}`;
         } catch (err: any) {
             console.error("Payment error:", err);
             setError(err.message || "Payment failed. Please try again.");
-        } finally {
             setIsProcessing(false);
         }
     };
