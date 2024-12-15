@@ -16,7 +16,7 @@ CORS(app, resources={
     r"/*": {
         "origins": ["https://fabulous-screenshot-716470.framer.app"],
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Accept", "Origin"],
+        "allow_headers": ["Content-Type", "Authorization", "Accept", "Origin"],
         "supports_credentials": True
     }
 })
@@ -201,25 +201,26 @@ def get_lot_size(address):
     return 5000  # Default to 5000 sq ft
 
 def calculate_price(lot_size_range, service_type='ONE_TIME'):
+    # Base prices for different service types
     base_prices = {
-        'SMALL': 30,    # Up to 5,000 sq ft
-        'MEDIUM': 45,   # 5,001 - 10,000 sq ft
-        'LARGE': 60,    # 10,001 - 15,000 sq ft
-        'XLARGE': 75    # Over 15,000 sq ft
+        'ONE_TIME': 50,
+        'BI_WEEKLY': 45,
+        'WEEKLY': 40
     }
     
-    # Service type multipliers
-    service_multipliers = {
-        'ONE_TIME': 1.0,
-        'WEEKLY': 0.9,  # 10% discount
-        'BIWEEKLY': 0.95  # 5% discount
+    # Size multipliers
+    size_multipliers = {
+        '0-5000': 1.0,
+        '5001-10000': 1.5,
+        '10001-15000': 2.0,
+        '15001-20000': 2.5,
+        '20001+': 3.0
     }
     
-    base_price = base_prices.get(lot_size_range, base_prices['MEDIUM'])
-    multiplier = service_multipliers.get(service_type, 1.0)
+    base_price = base_prices.get(service_type, base_prices['ONE_TIME'])
+    multiplier = size_multipliers.get(lot_size_range, size_multipliers['20001+'])
     
-    final_price = base_price * multiplier
-    return round(final_price)
+    return base_price * multiplier
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
