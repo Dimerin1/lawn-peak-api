@@ -176,6 +176,27 @@ function QuoteCalculator() {
                 onAddressSelect={handleAddressSelect} 
                 error={error}
                 isLoading={isLoading}
+                style={{
+                    input: {
+                        width: "100%",
+                        height: "60px",
+                        padding: "12px 16px",
+                        fontSize: "16px",
+                        lineHeight: "1.2",
+                        fontFamily: "Be Vietnam Pro",
+                        fontWeight: "400",
+                        color: "#999999",
+                        "::placeholder": {
+                            color: "#999999",
+                            opacity: 1
+                        },
+                        backgroundColor: "rgba(187, 187, 187, 0.15)",
+                        border: "none",
+                        borderRadius: "12px",
+                        outline: "none",
+                        boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.2)"
+                    }
+                }}
             />
             
             {/* Add Lot Size Dropdown */}
@@ -205,9 +226,9 @@ function QuoteCalculator() {
                     boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.2)"
                 }}
             >
-                <option value="">Select Lot Size</option>
+                <option value="" style={{ color: "#999999" }}>Select Lot Size</option>
                 {lotSizeOptions.map(option => (
-                    <option key={option.value} value={option.value}>
+                    <option key={option.value} value={option.value} style={{ color: "#999999" }}>
                         {option.label}
                     </option>
                 ))}
@@ -244,9 +265,9 @@ function QuoteCalculator() {
                     boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.2)"
                 }}
             >
-                <option value="">Select a service frequency...</option>
+                <option value="" style={{ color: "#999999" }}>Select a service frequency...</option>
                 {Object.entries(SERVICES).map(([value, service]) => (
-                    <option key={value} value={value} style={{ padding: "8px" }}>
+                    <option key={value} value={value} style={{ color: "#999999" }}>
                         {service.name}
                     </option>
                 ))}
@@ -289,7 +310,7 @@ function QuoteCalculator() {
 
 export default QuoteCalculator
 
-function AddressInput({ onAddressSelect, error, isLoading }) {
+function AddressInput({ onAddressSelect, error, isLoading, style }) {
     const [address, setAddress] = React.useState("")
     const [addressError, setAddressError] = React.useState("")
     const [isLoadingAddress, setIsLoadingAddress] = React.useState(false)
@@ -334,19 +355,11 @@ function AddressInput({ onAddressSelect, error, isLoading }) {
                     placeholder="Enter your address..."
                     disabled={isLoading}
                     style={{
-                        width: "100%",
-                        height: "60px",
-                        padding: "12px 16px",
-                        fontSize: "16px",
-                        lineHeight: "1.2",
-                        fontFamily: "Be Vietnam Pro",
-                        fontWeight: "400",
-                        color: "#999999",
-                        backgroundColor: "rgba(187, 187, 187, 0.15)",
-                        border: "none",
-                        borderRadius: "12px",
-                        outline: "none",
-                        boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.2)"
+                        ...style.input,
+                        "::placeholder": {
+                            color: "#999999",
+                            opacity: 1
+                        }
                     }}
                 />
                 {isLoadingAddress && (

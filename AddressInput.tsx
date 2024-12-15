@@ -58,7 +58,24 @@ export function AddressInput({ value, onChange, onSelect }) {
                     backgroundColor: "rgba(187, 187, 187, 0.15)",
                     border: "none",
                     borderRadius: "12px",
-                    outline: "none"
+                    outline: "none",
+                    boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.2)",
+                    "::placeholder": {
+                        color: "#999999",
+                        opacity: 1
+                    },
+                    "&::-webkit-input-placeholder": {
+                        color: "#999999",
+                        opacity: 1
+                    },
+                    "&::-moz-placeholder": {
+                        color: "#999999",
+                        opacity: 1
+                    },
+                    "&:-ms-input-placeholder": {
+                        color: "#999999",
+                        opacity: 1
+                    }
                 }}
                 disabled={isLoading}
             />
