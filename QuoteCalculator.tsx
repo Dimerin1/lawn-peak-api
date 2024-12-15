@@ -1,5 +1,7 @@
 import * as React from "react"
 import { addPropertyControls, ControlType } from "framer"
+import { loadStripe } from "@stripe/stripe-js"
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/stripe-js"
 
 // Service configuration
 const SERVICES = {
@@ -57,6 +59,81 @@ const selectStyle = {
     paddingRight: "48px",
 }
 
+function PaymentSetupForm({ clientSecret, onSuccess, onError }) {
+    const stripe = useStripe()
+    const elements = useElements()
+    const [isProcessing, setIsProcessing] = React.useState(false)
+    const [errorMessage, setErrorMessage] = React.useState("")
+
+    const handleSubmit = async (event) => {
+        event.preventDefault()
+        
+        if (!stripe || !elements) {
+            return
+        }
+
+        setIsProcessing(true)
+
+        try {
+            const { error } = await stripe.confirmSetup({
+                elements,
+                confirmParams: {
+                    return_url: window.location.origin + '/success'
+                }
+            })
+
+            if (error) {
+                setErrorMessage(error.message)
+                onError(error)
+            } else {
+                onSuccess()
+            }
+        } catch (err) {
+            setErrorMessage(err.message || 'An unexpected error occurred')
+            onError(err)
+        } finally {
+            setIsProcessing(false)
+        }
+    }
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <PaymentElement />
+            <button
+                type="submit"
+                disabled={!stripe || isProcessing}
+                style={{
+                    width: "100%",
+                    padding: "16px",
+                    backgroundColor: "#FFC043",
+                    border: "none",
+                    borderRadius: "12px",
+                    color: "#000",
+                    fontSize: "16px",
+                    fontWeight: "500",
+                    cursor: isProcessing ? "not-allowed" : "pointer",
+                    opacity: isProcessing ? 0.7 : 1,
+                    marginTop: "16px"
+                }}
+            >
+                {isProcessing ? "Setting up..." : "Save Payment Method"}
+            </button>
+            {errorMessage && (
+                <div style={{
+                    color: "#e53e3e",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    backgroundColor: "rgba(229, 62, 62, 0.1)",
+                    marginTop: "8px",
+                    fontSize: "14px"
+                }}>
+                    {errorMessage}
+                </div>
+            )}
+        </form>
+    )
+}
+
 function QuoteCalculator({ onPriceChange, onServiceChange }) {
     const [formData, setFormData] = React.useState({
         address: "",
@@ -70,8 +147,8 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
     const [priceDisplay, setPriceDisplay] = React.useState("")
     const [error, setError] = React.useState("")
     const [isLoading, setIsLoading] = React.useState(false)
-    const [isProcessingPayment, setIsProcessingPayment] = React.useState(false)
-    const [paymentError, setPaymentError] = React.useState("")
+    const [stripePromise, setStripePromise] = React.useState(null)
+    const [clientSecret, setClientSecret] = React.useState(null)
 
     const handleAddressSelect = async (address: string) => {
         setIsLoading(true)
@@ -184,8 +261,8 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
     };
 
     const handlePaymentSetup = async () => {
-        setIsProcessingPayment(true)
-        setPaymentError("")
+        setIsLoading(true)
+        setError("")
         
         try {
             const response = await fetch('https://lawn-peak-api.onrender.com/create-setup-intent', {
@@ -212,15 +289,24 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
             // Store customer ID in localStorage for later use
             localStorage.setItem('lawn_peak_customer_id', data.customerId)
             
-            // Redirect to Stripe's hosted payment method setup page
-            const setupUrl = `https://dashboard.stripe.com/setup/${data.clientSecret}`
-            window.location.href = setupUrl
+            // Initialize Stripe
+            setStripePromise(loadStripe(data.publishableKey))
+            setClientSecret(data.clientSecret)
         } catch (err) {
             console.error('Payment setup error:', err)
-            setPaymentError(err.message || 'Failed to set up payment method. Please try again.')
+            setError(err.message || 'Failed to set up payment method. Please try again.')
         } finally {
-            setIsProcessingPayment(false)
+            setIsLoading(false)
         }
+    }
+
+    const handlePaymentSuccess = () => {
+        // Redirect to success page or show success message
+        window.location.href = window.location.origin + '/success'
+    }
+
+    const handlePaymentError = (error) => {
+        setError(error.message || 'Failed to set up payment method. Please try again.')
     }
 
     return (
@@ -306,24 +392,34 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     
                     {formData.address && formData.lotSize && formData.service && formData.phone ? (
                         <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "16px" }}>
-                            <button
-                                onClick={handlePaymentSetup}
-                                disabled={isProcessingPayment}
-                                style={{
-                                    width: "100%",
-                                    padding: "16px",
-                                    backgroundColor: "#FFC043",
-                                    border: "none",
-                                    borderRadius: "12px",
-                                    color: "#000",
-                                    fontSize: "16px",
-                                    fontWeight: "500",
-                                    cursor: isProcessingPayment ? "not-allowed" : "pointer",
-                                    opacity: isProcessingPayment ? 0.7 : 1,
-                                }}
-                            >
-                                {isProcessingPayment ? "Processing..." : "Save Payment Method"}
-                            </button>
+                            {!clientSecret ? (
+                                <button
+                                    onClick={handlePaymentSetup}
+                                    disabled={isLoading}
+                                    style={{
+                                        width: "100%",
+                                        padding: "16px",
+                                        backgroundColor: "#FFC043",
+                                        border: "none",
+                                        borderRadius: "12px",
+                                        color: "#000",
+                                        fontSize: "16px",
+                                        fontWeight: "500",
+                                        cursor: isLoading ? "not-allowed" : "pointer",
+                                        opacity: isLoading ? 0.7 : 1,
+                                    }}
+                                >
+                                    {isLoading ? "Processing..." : "Continue to Payment"}
+                                </button>
+                            ) : stripePromise && clientSecret ? (
+                                <Elements stripe={stripePromise} options={{ clientSecret }}>
+                                    <PaymentSetupForm
+                                        clientSecret={clientSecret}
+                                        onSuccess={handlePaymentSuccess}
+                                        onError={handlePaymentError}
+                                    />
+                                </Elements>
+                            ) : null}
                             
                             <div style={{
                                 textAlign: "center",
@@ -334,7 +430,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                                 Your card will not be charged until after the service is completed
                             </div>
                             
-                            {paymentError && (
+                            {error && (
                                 <div style={{
                                     color: "#e53e3e",
                                     padding: "12px",
@@ -343,7 +439,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                                     marginTop: "8px",
                                     fontSize: "14px"
                                 }}>
-                                    {paymentError}
+                                    {error}
                                 </div>
                             )}
                         </div>
