@@ -16,7 +16,7 @@ CORS(app, resources={
     r"/*": {
         "origins": ["https://fabulous-screenshot-716470.framer.app"],
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Accept", "Origin"],
+        "allow_headers": ["Content-Type", "Authorization", "Accept", "Origin"],
         "supports_credentials": True
     }
 })
@@ -31,30 +31,31 @@ stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 def home():
     return jsonify({"status": "API is running"})
 
-@app.route('/checkout')
-def checkout():
+@app.route('/create-checkout-session', methods=['POST'])
+def create_checkout_session():
     try:
-        # Get parameters from URL
-        price = request.args.get('price')
-        service_type = request.args.get('service_type')
-        address = request.args.get('address')
-        lot_size = request.args.get('lot_size')
-        success_url = request.args.get('success_url')
-        cancel_url = request.args.get('cancel_url')
-        
+        data = request.json
+        price = data.get('price')
+        service_type = data.get('service_type')
+        address = data.get('address')
+        lot_size = data.get('lot_size')
+        success_url = data.get('success_url')
+        cancel_url = data.get('cancel_url')
+
         if not all([price, service_type, address, lot_size, success_url, cancel_url]):
             return jsonify({'error': 'Missing required parameters'}), 400
 
-        # Create Stripe checkout session
-        checkout_session = stripe.checkout.Session.create(
+        # Create Stripe Checkout Session
+        session = stripe.checkout.Session.create(
             payment_method_types=['card'],
             line_items=[{
                 'price_data': {
                     'currency': 'usd',
-                    'unit_amount': int(price),  # Already in cents
+                    'unit_amount': int(float(price) * 100),  # Convert to cents
                     'product_data': {
                         'name': f'Lawn Mowing Service - {service_type}',
                         'description': f'Address: {address}\nLot Size: {lot_size}',
+                        'images': ['https://images.unsplash.com/photo-1592417817098-8fd3d9eb14a5?q=80&w=1000'],
                     },
                 },
                 'quantity': 1,
@@ -62,15 +63,24 @@ def checkout():
             mode='payment',
             success_url=success_url,
             cancel_url=cancel_url,
-            metadata={
-                'service_type': service_type,
-                'address': address,
-                'lot_size': lot_size
-            }
+            payment_intent_data={
+                'metadata': {
+                    'service_type': service_type,
+                    'address': address,
+                    'lot_size': lot_size
+                }
+            },
+            customer_email=None,  # Optional: Add customer email if available
+            billing_address_collection='required',
+            shipping_address_collection=None,
+            allow_promotion_codes=True,
+            locale='auto'
         )
-        
-        # Redirect to Stripe Checkout
-        return redirect(checkout_session.url)
+
+        return jsonify({
+            'sessionId': session.id,
+            'url': session.url
+        })
 
     except stripe.error.StripeError as e:
         return jsonify({'error': str(e.user_message)}), 400
@@ -191,25 +201,26 @@ def get_lot_size(address):
     return 5000  # Default to 5000 sq ft
 
 def calculate_price(lot_size_range, service_type='ONE_TIME'):
+    # Base prices for different service types
     base_prices = {
-        'SMALL': 30,    # Up to 5,000 sq ft
-        'MEDIUM': 45,   # 5,001 - 10,000 sq ft
-        'LARGE': 60,    # 10,001 - 15,000 sq ft
-        'XLARGE': 75    # Over 15,000 sq ft
+        'ONE_TIME': 50,
+        'BI_WEEKLY': 45,
+        'WEEKLY': 40
     }
     
-    # Service type multipliers
-    service_multipliers = {
-        'ONE_TIME': 1.0,
-        'WEEKLY': 0.9,  # 10% discount
-        'BIWEEKLY': 0.95  # 5% discount
+    # Size multipliers
+    size_multipliers = {
+        '0-5000': 1.0,
+        '5001-10000': 1.5,
+        '10001-15000': 2.0,
+        '15001-20000': 2.5,
+        '20001+': 3.0
     }
     
-    base_price = base_prices.get(lot_size_range, base_prices['MEDIUM'])
-    multiplier = service_multipliers.get(service_type, 1.0)
+    base_price = base_prices.get(service_type, base_prices['ONE_TIME'])
+    multiplier = size_multipliers.get(lot_size_range, size_multipliers['20001+'])
     
-    final_price = base_price * multiplier
-    return round(final_price)
+    return base_price * multiplier
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
