@@ -9,6 +9,26 @@ export function AddressInput({ value, onChange, onSelect }) {
 
     React.useEffect(() => {
         if (typeof window !== 'undefined') {
+            // Add global styles to override Google Places Autocomplete
+            const style = document.createElement('style')
+            style.textContent = `
+                .pac-container {
+                    font-family: "Be Vietnam Pro", sans-serif;
+                }
+                .pac-item {
+                    font-family: "Be Vietnam Pro", sans-serif;
+                    color: #999999;
+                }
+                .pac-item-query {
+                    font-family: "Be Vietnam Pro", sans-serif;
+                    color: #999999;
+                }
+                .pac-matched {
+                    color: #999999;
+                }
+            `
+            document.head.appendChild(style)
+
             const autocomplete = new google.maps.places.Autocomplete(
                 autocompleteRef.current,
                 { types: ['address'], componentRestrictions: { country: 'us' } }
@@ -32,6 +52,10 @@ export function AddressInput({ value, onChange, onSelect }) {
                     setIsLoading(false)
                 }
             })
+
+            return () => {
+                document.head.removeChild(style)
+            }
         }
     }, [onSelect])
 
@@ -60,23 +84,8 @@ export function AddressInput({ value, onChange, onSelect }) {
                     borderRadius: "12px",
                     outline: "none",
                     boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.2)",
-                    "::placeholder": {
-                        color: "#999999",
-                        opacity: 1
-                    },
-                    "&::-webkit-input-placeholder": {
-                        color: "#999999",
-                        opacity: 1
-                    },
-                    "&::-moz-placeholder": {
-                        color: "#999999",
-                        opacity: 1
-                    },
-                    "&:-ms-input-placeholder": {
-                        color: "#999999",
-                        opacity: 1
-                    }
                 }}
+                className="address-input"
                 disabled={isLoading}
             />
             {addressError && (
@@ -87,6 +96,28 @@ export function AddressInput({ value, onChange, onSelect }) {
         </div>
     )
 }
+
+// Add global styles for the address input
+const style = document.createElement('style')
+style.textContent = `
+    .address-input::placeholder {
+        color: #999999 !important;
+        opacity: 0.5 !important;
+    }
+    .address-input::-webkit-input-placeholder {
+        color: #999999 !important;
+        opacity: 0.5 !important;
+    }
+    .address-input::-moz-placeholder {
+        color: #999999 !important;
+        opacity: 0.5 !important;
+    }
+    .address-input:-ms-input-placeholder {
+        color: #999999 !important;
+        opacity: 0.5 !important;
+    }
+`
+document.head.appendChild(style)
 
 AddressInput.defaultProps = {
     value: "",

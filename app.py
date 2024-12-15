@@ -189,6 +189,64 @@ def create_payment_endpoint():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/create-payment-intent', methods=['POST'])
+def create_payment_intent():
+    try:
+        data = request.json
+        amount = data.get('amount')
+        
+        if not amount:
+            return jsonify({'error': 'Amount is required'}), 400
+
+        # Create a PaymentIntent with the order amount and currency
+        intent = stripe.PaymentIntent.create(
+            amount=int(float(amount) * 100),  # Convert to cents
+            currency='usd',
+            payment_method_types=['card'],
+            metadata={
+                'service_type': data.get('service_type', ''),
+                'address': data.get('address', ''),
+                'lot_size': data.get('lot_size', '')
+            }
+        )
+
+        return jsonify({
+            'clientSecret': intent.client_secret,
+            'publishableKey': os.getenv('STRIPE_PUBLISHABLE_KEY', 'pk_test_51ONqUHFIWJQKnfxXBSWTlcKRGpvhBWRtQnxQxBTqVPxAYF3IkXlPHbOJBHQIxULhsqOQRXhTPTz8F8UbNrE7KtGD00yrTDUQbR')
+        })
+
+    except stripe.error.StripeError as e:
+        return jsonify({'error': str(e.user_message)}), 400
+    except Exception as e:
+        print('Error creating payment intent:', str(e))
+        return jsonify({'error': 'An unexpected error occurred'}), 500
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    event = None
+    payload = request.data
+    sig_header = request.headers.get('Stripe-Signature')
+    webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, webhook_secret
+        )
+    except ValueError as e:
+        # Invalid payload
+        return jsonify({'error': 'Invalid payload'}), 400
+    except stripe.error.SignatureVerificationError as e:
+        # Invalid signature
+        return jsonify({'error': 'Invalid signature'}), 400
+
+    # Handle the event
+    if event['type'] == 'payment_intent.succeeded':
+        payment_intent = event['data']['object']
+        print('Payment succeeded:', payment_intent['id'])
+        # Here you can add logic to update your database, send confirmation emails, etc.
+    
+    return jsonify({'status': 'success'})
+
 def get_lot_size(address):
     api_key = os.getenv('GOOGLE_MAPS_API_KEY')
     

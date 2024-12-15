@@ -56,6 +56,124 @@ A complete solution for integrating address-based quotes and Stripe payment proc
 - Price calculation with discounts
 - Status: 
 
+## Framer Web Implementation
+
+### Required Head Section
+```html
+<!-- Google Maps API for address autocomplete -->
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDPMxdPl54WLri6kvQl6XNjVzTsXhuzOXw&libraries=places"></script>
+
+<!-- Stripe.js for payment processing -->
+<script src="https://js.stripe.com/v3/"></script>
+
+<!-- Initialize Stripe -->
+<script>
+  window.Stripe = Stripe('pk_test_51ONqUHFIWJQKnfxXBSWTlcKRGpvhBWRtQnxQxBTqVPxAYF3IkXlPHbOJBHQIxULhsqOQRXhTPTz8F8UbNrE7KtGD00yrTDUQbR');
+</script>
+```
+
+### Framer Web Specific Requirements
+1. **Component Structure**
+   - Each component must be self-contained in a single code block
+   - No external dependencies or imports outside Stripe and Google Maps
+   - All styles must be inline or in the component
+
+2. **State Management**
+   - Use React.useState for local state
+   - Pass data between steps using Framer's built-in connections
+   - Store sensitive data only in memory, never in localStorage
+
+3. **Integration Points**
+   - Step 1 → Step 2: Pass customer name
+   - Step 2 → Step 3: Pass address, lot size, service type, and calculated price
+   - Step 3: Handle payment and submit order
+
+4. **Styling Guidelines**
+   - Use native Framer fonts
+   - Match existing UI components
+   - Maintain consistent spacing and colors
+   - Support both light and dark modes
+
+5. **Error Handling**
+   - Display inline errors for invalid inputs
+   - Show payment processing status
+   - Handle network failures gracefully
+
+### Component Implementation Status
+- [x] Step 1: Customer Name Input
+- [x] Step 2: Address & Service Selection
+- [ ] Step 3: Payment Processing (In Progress)
+  - [x] Basic UI Implementation
+  - [x] Stripe Elements Integration
+  - [ ] Payment Processing Logic
+  - [ ] Success/Error States
+  - [ ] Order Confirmation
+
+## Framer Web Connections Setup
+
+### Connecting QuoteCalculator to PaymentForm
+
+1. **Setup Variables in QuoteCalculator**
+   ```typescript
+   // In QuoteCalculator, expose these variables:
+   const [formData, setFormData] = React.useState({
+     price: 0,
+     service: "ONE_TIME",
+     // ... other fields
+   })
+   ```
+
+2. **Framer Web Connection Steps**
+   1. Open your Framer project
+   2. Select the PaymentForm component on the canvas
+   3. In the right sidebar, click "Code" tab
+   4. Under "Properties", you'll see:
+      - `price` (number)
+      - `serviceType` (enum)
+   
+   5. Click "Connect" next to each property:
+      ```
+      price → QuoteCalculator.formData.price
+      serviceType → QuoteCalculator.formData.service
+      ```
+
+3. **Overrides in QuoteCalculator**
+   ```typescript
+   // Add these overrides to expose the state:
+   QuoteCalculator.defaultProps = {
+     price: 0,
+     serviceType: "ONE_TIME"
+   }
+
+   addPropertyControls(QuoteCalculator, {
+     onPriceChange: {
+       type: ControlType.EventHandler
+     },
+     onServiceChange: {
+       type: ControlType.EventHandler
+     }
+   })
+   ```
+
+4. **Testing the Connection**
+   1. In Preview mode:
+      - Fill out Step 1 (Name)
+      - In Step 2:
+         - Select a lot size
+         - Choose a service type
+      - The price should automatically update in Step 3
+
+### Troubleshooting Connections
+If the price isn't updating:
+1. Check the Console (⌘+Option+I or Ctrl+Shift+I)
+2. Verify that QuoteCalculator is emitting price changes
+3. Verify PaymentForm is receiving price updates
+
+### Best Practices
+1. Always use the `formData.price` from QuoteCalculator as the source of truth
+2. Don't modify the price in PaymentForm
+3. Handle loading states while price is being calculated
+
 ## Next Steps
 
 1. Integrate real lot size calculation
