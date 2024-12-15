@@ -36,28 +36,37 @@ export function PaymentForm({ onSuccess, onBack }: PaymentFormProps) {
     } | null>(null);
     const cardElementRef = React.useRef<HTMLDivElement>(null);
 
-    // Load Stripe
+    // Load Stripe.js script
     React.useEffect(() => {
-        const loadStripe = async () => {
-            try {
-                if (!window.Stripe) {
-                    console.error('Stripe.js not loaded');
-                    setError('Payment system not loaded. Please refresh the page.');
-                    return;
-                }
-                
+        if (window.Stripe) {
+            setStripe(window.Stripe('pk_test_51ONqUHFIWJQKnfxXBSWTlcKRGpvhBWRtQnxQxBTqVPxAYF3IkXlPHbOJBHQIxULhsqOQRXhTPTz8F8UbNrE7KtGD00yrTDUQbR'));
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = 'https://js.stripe.com/v3/';
+        script.async = true;
+        script.onload = () => {
+            if (window.Stripe) {
                 const stripeInstance = window.Stripe('pk_test_51ONqUHFIWJQKnfxXBSWTlcKRGpvhBWRtQnxQxBTqVPxAYF3IkXlPHbOJBHQIxULhsqOQRXhTPTz8F8UbNrE7KtGD00yrTDUQbR');
                 setStripe(stripeInstance);
-                const elementsInstance = stripeInstance.elements();
-                setElements(elementsInstance);
-            } catch (err) {
-                console.error('Error loading Stripe:', err);
-                setError('Failed to initialize payment system');
             }
         };
-        
-        loadStripe();
+        document.body.appendChild(script);
+
+        return () => {
+            const existingScript = document.querySelector('script[src="https://js.stripe.com/v3/"]');
+            if (existingScript) {
+                document.body.removeChild(existingScript);
+            }
+        };
     }, []);
+
+    // Initialize Elements after Stripe is loaded
+    React.useEffect(() => {
+        if (!stripe) return;
+        setElements(stripe.elements());
+    }, [stripe]);
 
     // Initialize Card Element
     React.useEffect(() => {
