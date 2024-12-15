@@ -242,12 +242,13 @@ def get_lot_size(address):
     width = haversine(ne['lat'], sw['lng'], ne['lat'], ne['lng'])
     height = haversine(ne['lat'], sw['lng'], sw['lat'], sw['lng'])
     
-    # Convert square meters to square feet
-    lot_size = width * height * 10.764
+    # Convert square meters to square feet and apply a residential factor
+    # Viewport is usually much larger than the actual property
+    lot_size = (width * height * 10.764) * 0.15  # 15% of viewport area
     
-    # Apply some reasonable constraints
+    # Apply some reasonable constraints for residential properties
     min_size = 1000  # Minimum lot size in sq ft
-    max_size = 43560  # Maximum lot size (1 acre) in sq ft
+    max_size = 20000  # Maximum lot size in sq ft (about half acre)
     
     return max(min(round(lot_size), max_size), min_size)
 
