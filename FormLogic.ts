@@ -119,8 +119,8 @@ export function withServiceSelect(): Override {
 
                 console.log("Calculating price with lot size:", formData.lotSize)
                 const requestBody = {
-                    lot_size: formData.lotSize,
-                    service: selectedService
+                    lot_size: Number(formData.lotSize), // Ensure lot_size is a number
+                    service: selectedService.toLowerCase() // Convert service to lowercase
                 }
                 console.log("Sending price calculation request:", requestBody)
 
@@ -134,21 +134,14 @@ export function withServiceSelect(): Override {
                     body: JSON.stringify(requestBody)
                 })
 
-                let data
                 const responseText = await response.text()
                 console.log("Raw response:", responseText)
 
-                try {
-                    data = JSON.parse(responseText)
-                } catch (e) {
-                    console.error("Failed to parse response:", e)
-                    throw new Error("Invalid response from server")
-                }
-
                 if (!response.ok) {
-                    throw new Error(data.error || "Failed to calculate price")
+                    throw new Error(responseText || "Failed to calculate price")
                 }
 
+                const data = JSON.parse(responseText)
                 formData.price = data.price
                 console.log("Price calculated:", formData.price)
                 updatePriceDisplay(`$${formData.price}`)
@@ -156,7 +149,7 @@ export function withServiceSelect(): Override {
                 console.error("Error in price calculation:", error)
                 updatePriceDisplay(error.message || "Error calculating price")
             }
-        },
+        }
     }
 }
 

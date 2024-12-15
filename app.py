@@ -127,7 +127,7 @@ def calculate_price_endpoint():
         print("Received price calculation request:", data)  # Debug log
         
         lot_size = data.get('lot_size')
-        service = data.get('service', '').lower()  # Convert to lowercase for comparison
+        service = data.get('service', '').lower()  # Convert to lowercase
         
         if not lot_size:
             return jsonify({'error': 'Lot size is required'}), 400
