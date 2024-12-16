@@ -7,6 +7,7 @@ from pymongo import MongoClient
 from datetime import datetime
 import sys
 import certifi
+import ssl
 import urllib.parse
 
 load_dotenv()
@@ -24,10 +25,12 @@ try:
     
     print("Connecting to MongoDB...", file=sys.stderr)
     
-    # Connect with minimal settings
+    # Connect with updated SSL settings
     client = MongoClient(
         mongo_uri,
         tlsCAFile=certifi.where(),
+        tls=True,
+        ssl_cert_reqs=ssl.CERT_REQUIRED,
         serverSelectionTimeoutMS=5000
     )
     
