@@ -25,12 +25,10 @@ try:
     
     print("Connecting to MongoDB...", file=sys.stderr)
     
-    # Connect with updated SSL settings
+    # Connect with minimal SSL settings
     client = MongoClient(
         mongo_uri,
         tlsCAFile=certifi.where(),
-        tls=True,
-        ssl_cert_reqs=ssl.CERT_REQUIRED,
         serverSelectionTimeoutMS=5000
     )
     
