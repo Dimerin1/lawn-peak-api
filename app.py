@@ -27,17 +27,36 @@ try:
     print(f"MongoDB URI: {mongo_uri}", file=sys.stderr)
     print("Connecting to MongoDB...", file=sys.stderr)
     
-    # Configure DNS resolver
-    dns.resolver.default_resolver = dns.resolver.Resolver(configure=False)
-    dns.resolver.default_resolver.nameservers = ['8.8.8.8']  # Use Google's DNS
+    # Create custom SSL context
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+    ssl_context.verify_mode = ssl.CERT_REQUIRED
     
-    # Connect with minimal settings
+    # Convert srv URI to direct connection format
+    if mongo_uri.startswith('mongodb+srv://'):
+        username = 'jakubsmalmail'
+        password = 'fWo3w3U5KLtdeONq'
+        hosts = [
+            'lawnpeak-shard-00-00.l6fbe.mongodb.net:27017',
+            'lawnpeak-shard-00-01.l6fbe.mongodb.net:27017',
+            'lawnpeak-shard-00-02.l6fbe.mongodb.net:27017'
+        ]
+        hosts_str = ','.join(hosts)
+        mongo_uri = f'mongodb://{username}:{password}@{hosts_str}/lawn-peak?ssl=true&replicaSet=atlas-h2l1iy-shard-0&authSource=admin'
+    
+    print(f"Using connection string: {mongo_uri}", file=sys.stderr)
+    
+    # Connect with explicit SSL context
     client = MongoClient(
         mongo_uri,
+        ssl=True,
+        ssl_certfile=certifi.where(),
+        ssl_cert_reqs=ssl.CERT_REQUIRED,
+        connect=True,
+        serverSelectionTimeoutMS=30000,
         connectTimeoutMS=30000,
         socketTimeoutMS=30000,
-        serverSelectionTimeoutMS=30000,
-        tlsCAFile=certifi.where()
+        maxPoolSize=1
     )
     
     # Test the connection
