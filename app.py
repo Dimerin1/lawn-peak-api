@@ -24,72 +24,24 @@ CORS(app)
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
 try:
-    # Try different possible MongoDB URI environment variables
-    possible_vars = [
-        'MONGODB_URI',
-        'MongoDB_MONGODB_URI',
-        'MONGO_URI',
-        'MongoDB_URI',
-        'MONGOHOST'
-    ]
-    
-    for var in possible_vars:
-        value = os.environ.get(var)
-        print(f"Checking {var}: {value}", file=sys.stderr)
-    
     # Get MongoDB URI from environment
-    mongo_uri = os.environ.get('MongoDB_MONGODB_URI') or os.environ.get('MONGODB_URI')
+    mongo_uri = os.environ.get('MONGODB_URI')
+    print(f"Found MongoDB URI: {mongo_uri}", file=sys.stderr)
+    
     if not mongo_uri:
         raise ValueError("MongoDB URI not found in environment variables")
     
-    print(f"Looking for MONGODB_URI, found: {mongo_uri}", file=sys.stderr)
-    
-    # Also try with different methods
-    mongo_uri_getenv = os.getenv('MONGODB_URI')
-    print(f"Using os.getenv: {mongo_uri_getenv}", file=sys.stderr)
-    
-    print(f"MongoDB URI: {mongo_uri}", file=sys.stderr)
     print("Connecting to MongoDB...", file=sys.stderr)
-    
-    # Create custom SSL context
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
-    ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
-    ssl_context.verify_mode = ssl.CERT_REQUIRED
-    
-    # Convert srv URI to direct connection format
-    if mongo_uri.startswith('mongodb+srv://'):
-        username = 'jakubsmalmail'
-        password = 'fWo3w3U5KLtdeONq'
-        hosts = [
-            'lawnpeak-shard-00-00.l6fbe.mongodb.net:27017',
-            'lawnpeak-shard-00-01.l6fbe.mongodb.net:27017',
-            'lawnpeak-shard-00-02.l6fbe.mongodb.net:27017'
-        ]
-        hosts_str = ','.join(hosts)
-        mongo_uri = f'mongodb://{username}:{password}@{hosts_str}/lawn-peak?ssl=true&replicaSet=atlas-h2l1iy-shard-0&authSource=admin'
-    
-    print(f"Using connection string: {mongo_uri}", file=sys.stderr)
-    
-    # Connect with explicit SSL context
     client = pymongo.MongoClient(
         mongo_uri,
-        ssl=True,
-        ssl_certfile=certifi.where(),
-        ssl_cert_reqs=ssl.CERT_REQUIRED,
-        connect=True,
-        serverSelectionTimeoutMS=30000,
-        connectTimeoutMS=30000,
-        socketTimeoutMS=30000,
-        maxPoolSize=1
+        serverSelectionTimeoutMS=5000  # 5 second timeout
     )
     
     # Test the connection
-    print("Testing connection...", file=sys.stderr)
-    client.admin.command('ping')
+    client.server_info()
     print("Successfully connected to MongoDB!", file=sys.stderr)
     
-    # Get database
-    db = client.get_database('lawn-peak')
+    db = client.lawn_peak
     
     # Get or create collections
     if 'payments' not in db.list_collection_names():
