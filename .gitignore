@@ -28,10 +28,27 @@ yarn-debug.log*
 yarn-error.log*
 
 # IDE
-.idea
-.vscode
+.idea/
+.vscode/
 
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
 venv/
+*.so
+
+# Database
+*.db
+*.sqlite3
+
+# Backup files
+backup/
+*.bak
+*.backup
+*.old
+
+# Local development
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
