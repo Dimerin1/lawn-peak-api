@@ -19,8 +19,9 @@ if not stripe.api_key:
     logger.error("STRIPE_SECRET_KEY environment variable is not set")
 
 def create_app():
+    # Create the Flask application
     app = Flask(__name__)
-    
+
     # Configure CORS
     CORS(app, resources={
         r"/*": {
@@ -34,6 +35,8 @@ def create_app():
             "allow_headers": ["Content-Type", "Authorization"]
         }
     })
+
+    logger.info("Initializing routes...")
 
     @app.route('/')
     def home():
