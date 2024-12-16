@@ -1,5 +1,4 @@
 import * as React from "react"
-import { SERVICES, calculatePrice } from "./PriceCalculator"
 
 interface Customer {
     id: string

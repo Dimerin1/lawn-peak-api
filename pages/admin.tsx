@@ -1,4 +1,4 @@
-import AdminDashboard from "../AdminDashboardDeploy"
+import AdminDashboard from "../AdminDashboard"
 
 export default function AdminPage() {
     return <AdminDashboard />

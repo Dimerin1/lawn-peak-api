@@ -1,5 +1,5 @@
 import * as React from "react"
-import { addPropertyControls, ControlType } from "framer"
+import { AddressInput } from "./AddressInput"
 
 // Service configuration
 const SERVICES = {
@@ -57,7 +57,12 @@ const selectStyle = {
     paddingRight: "48px",
 }
 
-function QuoteCalculator({ onPriceChange, onServiceChange }) {
+interface QuoteCalculatorProps {
+    onPriceChange?: (price: number) => void;
+    onServiceChange?: (service: string) => void;
+}
+
+export function QuoteCalculator({ onPriceChange, onServiceChange }: QuoteCalculatorProps) {
     const [formData, setFormData] = React.useState({
         address: "",
         lotSize: "",
@@ -73,7 +78,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
     const [isProcessingPayment, setIsProcessingPayment] = React.useState(false)
     const [paymentError, setPaymentError] = React.useState("")
 
-    const handleAddressSelect = async (address: string) => {
+    const handleAddressSelect = async (address) => {
         setIsLoading(true)
         try {
             setFormData(prev => ({
@@ -91,7 +96,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         }
     }
 
-    const calculatePrice = (lotSize: string, service: string) => {
+    const calculatePrice = (lotSize, service) => {
         if (!lotSize) {
             throw new Error("Invalid lot size")
         }
@@ -141,7 +146,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         }
     }
 
-    const getQuote = async (lotSize: string, service: string) => {
+    const getQuote = async (lotSize, service) => {
         try {
             setIsLoading(true)
             setError("")
@@ -168,6 +173,8 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 service: service,
                 lotSize: lotSize
             }))
+
+            if (onPriceChange) onPriceChange(calculatedPrice)
             
         } catch (err) {
             console.error("Quote error:", err)
@@ -401,99 +408,6 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     }
                 `}
             </style>
-        </div>
-    )
-}
-
-QuoteCalculator.defaultProps = {
-    onPriceChange: () => {},
-    onServiceChange: () => {}
-}
-
-addPropertyControls(QuoteCalculator, {
-    onPriceChange: {
-        type: ControlType.EventHandler
-    },
-    onServiceChange: {
-        type: ControlType.EventHandler
-    }
-})
-
-function AddressInput({ value, onChange, onSelect, style }) {
-    const [address, setAddress] = React.useState("")
-    const [addressError, setAddressError] = React.useState("")
-    const [isLoadingAddress, setIsLoadingAddress] = React.useState(false)
-    const inputRef = React.useRef(null)
-
-    React.useEffect(() => {
-        if (typeof window !== "undefined" && window.google && inputRef.current) {
-            const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
-                componentRestrictions: { country: "us" },
-                fields: ["formatted_address", "geometry"]
-            })
-
-            autocomplete.addListener("place_changed", async () => {
-                try {
-                    setIsLoadingAddress(true)
-                    setAddressError("")
-                    
-                    const place = autocomplete.getPlace()
-                    if (!place.formatted_address) {
-                        throw new Error("Invalid address selected")
-                    }
-
-                    setAddress(place.formatted_address)
-                    onSelect(place.formatted_address)
-                } catch (err) {
-                    setAddressError(err.message || "Error selecting address")
-                } finally {
-                    setIsLoadingAddress(false)
-                }
-            })
-        }
-    }, [])
-
-    return (
-        <div style={{ width: "100%" }}>
-            <div style={{ position: "relative" }}>
-                <input
-                    ref={inputRef}
-                    type="text"
-                    value={value}
-                    onChange={(e) => onChange(e.target.value)}
-                    placeholder="Enter your address..."
-                    disabled={isLoadingAddress}
-                    style={{
-                        ...style.input,
-                        "::placeholder": {
-                            color: "#999999",
-                            opacity: 1
-                        }
-                    }}
-                />
-                {isLoadingAddress && (
-                    <div style={{
-                        position: "absolute",
-                        right: "12px",
-                        top: "50%",
-                        transform: "translateY(-50%)",
-                        color: "#718096",
-                        fontSize: "14px"
-                    }}>
-                        Loading...
-                    </div>
-                )}
-            </div>
-            {addressError && (
-                <div style={{ 
-                    color: "#e53e3e", 
-                    fontSize: "14px",
-                    marginTop: "4px",
-                    paddingLeft: "12px"
-                }}>
-                    {addressError}
-                </div>
-            )}
         </div>
     )
 }
