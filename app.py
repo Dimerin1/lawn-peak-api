@@ -19,6 +19,11 @@ CORS(app)
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
 try:
+    # Debug: Print all environment variables
+    print("All environment variables:", file=sys.stderr)
+    for key, value in os.environ.items():
+        print(f"{key}: {value}", file=sys.stderr)
+    
     # Get MongoDB URI from environment
     mongo_uri = os.environ.get('MONGODB_URI')
     if not mongo_uri:
