@@ -3,19 +3,19 @@ from flask_cors import CORS
 import os
 import time
 import logging
+import stripe
+from dotenv import load_dotenv
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 try:
-    from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
     # If dotenv is not available, we'll rely on OS environment variables
     pass
 
-import stripe
 import requests
 import json
 
@@ -73,9 +73,8 @@ if not stripe.api_key:
 def home():
     """Base endpoint to verify the app is running"""
     return jsonify({
-        'status': 'ok',
-        'message': 'Lawn Peak API is running',
-        'env': os.getenv('FLASK_ENV'),
+        'status': 'Lawn Peak Backend API is running',
+        'version': '1.0',
         'routes': [str(rule) for rule in app.url_map.iter_rules()]
     })
 
@@ -83,7 +82,12 @@ def home():
 def debug():
     """Debug endpoint to check configuration"""
     return jsonify({
-        'env_vars': {k: v for k, v in os.environ.items() if not k.startswith('_')},
+        'env_vars': {
+            'FLASK_ENV': os.getenv('FLASK_ENV'),
+            'FLASK_APP': os.getenv('FLASK_APP'),
+            'PORT': os.getenv('PORT'),
+            'STRIPE_KEY_LENGTH': len(os.getenv('STRIPE_SECRET_KEY', '')) if os.getenv('STRIPE_SECRET_KEY') else 0
+        },
         'routes': [str(rule) for rule in app.url_map.iter_rules()],
         'stripe_key_present': bool(stripe.api_key),
         'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
@@ -245,58 +249,29 @@ def create_setup_intent():
         print('Error creating setup intent:', str(e))
         return jsonify({'error': str(e)}), 400
 
-@app.route('/list-customers', methods=['GET'])
+@app.route('/list-customers')
 def list_customers():
+    """List all Stripe customers"""
     try:
-        # Debug info
-        logger.info("=== LIST CUSTOMERS ENDPOINT ===")
-        logger.info(f"Stripe Key Present: {bool(stripe.api_key)}")
-        if stripe.api_key:
-            logger.info(f"Stripe Key Last 4: {stripe.api_key[-4:]}")
-            logger.info(f"Stripe Key Length: {len(stripe.api_key)}")
-        
-        # Try to retrieve account info first
-        try:
-            account = stripe.Account.retrieve()
-            logger.info(f"Successfully retrieved Stripe account: {account.id}")
-        except Exception as e:
-            logger.error(f"Error retrieving Stripe account: {str(e)}")
-            return jsonify({
-                'error': 'Failed to retrieve Stripe account',
-                'details': str(e),
-                'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
-            }), 500
-        
-        # Now try to list customers
-        try:
-            customers = stripe.Customer.list(limit=100)
-            logger.info(f"Successfully retrieved {len(customers.data)} customers")
-        except Exception as e:
-            logger.error(f"Error listing customers: {str(e)}")
-            return jsonify({
-                'error': 'Failed to list customers',
-                'details': str(e),
-                'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
-            }), 500
-        
+        customers = stripe.Customer.list()
         return jsonify({
             'success': True,
-            'stripe_account_id': account.id,
-            'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None,
-            'customers': [{
-                'id': customer.id,
-                'created': customer.created,
-                'metadata': customer.metadata,
-                'has_payment_method': bool(customer.invoice_settings.default_payment_method) if customer.invoice_settings else False,
-                'charged': bool(customer.metadata.get('charged', False))
-            } for customer in customers.data]
+            'customers': [
+                {
+                    'id': customer.id,
+                    'email': customer.email,
+                    'name': customer.name,
+                    'created': customer.created
+                } for customer in customers.data
+            ]
         })
     except Exception as e:
-        logger.error(f"Unexpected error in list_customers: {str(e)}")
+        app.logger.error(f"Error listing customers: {str(e)}")
         return jsonify({
-            'error': 'Unexpected error',
-            'details': str(e),
-            'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
+            'success': False,
+            'error': str(e),
+            'stripe_key_present': bool(stripe.api_key),
+            'stripe_key_length': len(stripe.api_key) if stripe.api_key else 0
         }), 500
 
 @app.route('/charge-customer', methods=['POST'])
