@@ -18,11 +18,16 @@ interface Customer {
 
 function AdminDashboard() {
     const [customers, setCustomers] = React.useState<Customer[]>([])
+    const [filteredCustomers, setFilteredCustomers] = React.useState<Customer[]>([])
     const [chargingCustomerId, setChargingCustomerId] = React.useState<string | null>(null)
     const [loading, setLoading] = React.useState(true)
     const [error, setError] = React.useState<string | null>(null)
     const [isAuthenticated, setIsAuthenticated] = React.useState(false)
     const [password, setPassword] = React.useState("")
+    const [searchTerm, setSearchTerm] = React.useState("")
+    const [sortBy, setSortBy] = React.useState<'date' | 'price' | 'status'>('date')
+    const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc')
+    const [refreshKey, setRefreshKey] = React.useState(0)
 
     // Simple authentication
     const handleLogin = async (e: React.FormEvent) => {
@@ -70,6 +75,7 @@ function AdminDashboard() {
             }
             const data = await response.json()
             setCustomers(data.customers)
+            setFilteredCustomers(data.customers)
         } catch (err) {
             console.error('Error fetching customers:', err)
             setError(err instanceof Error ? err.message : 'Failed to fetch customers')
@@ -80,7 +86,42 @@ function AdminDashboard() {
 
     React.useEffect(() => {
         fetchCustomers()
-    }, [])
+    }, [refreshKey])
+
+    React.useEffect(() => {
+        let result = [...customers]
+        
+        // Apply search filter
+        if (searchTerm) {
+            result = result.filter(customer => 
+                customer.metadata.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                customer.metadata.service_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                customer.metadata.phone.includes(searchTerm)
+            )
+        }
+        
+        // Apply sorting
+        result.sort((a, b) => {
+            switch (sortBy) {
+                case 'date':
+                    return sortOrder === 'asc' 
+                        ? a.created - b.created 
+                        : b.created - a.created
+                case 'price':
+                    return sortOrder === 'asc'
+                        ? parseFloat(a.metadata.agreed_price) - parseFloat(b.metadata.agreed_price)
+                        : parseFloat(b.metadata.agreed_price) - parseFloat(a.metadata.agreed_price)
+                case 'status':
+                    return sortOrder === 'asc'
+                        ? (a.charged === b.charged ? 0 : a.charged ? 1 : -1)
+                        : (a.charged === b.charged ? 0 : a.charged ? -1 : 1)
+                default:
+                    return 0
+            }
+        })
+        
+        setFilteredCustomers(result)
+    }, [customers, searchTerm, sortBy, sortOrder])
 
     const handleCharge = async (customerId: string, amount: number) => {
         if (!customerId) return
@@ -189,6 +230,39 @@ function AdminDashboard() {
         )
     }
 
+    const renderDashboardSummary = () => {
+        const totalCustomers = customers.length
+        const paidCustomers = customers.filter(c => c.charged).length
+        const totalRevenue = customers
+            .filter(c => c.charged)
+            .reduce((sum, c) => sum + parseFloat(c.metadata.agreed_price), 0)
+
+        return (
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '16px',
+                marginBottom: '24px',
+                padding: '16px',
+                backgroundColor: '#f7fafc',
+                borderRadius: '8px'
+            }}>
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{totalCustomers}</div>
+                    <div style={{ color: '#4a5568' }}>Total Customers</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{paidCustomers}</div>
+                    <div style={{ color: '#4a5568' }}>Payments Collected</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold' }}>${totalRevenue.toFixed(2)}</div>
+                    <div style={{ color: '#4a5568' }}>Total Revenue</div>
+                </div>
+            </div>
+        )
+    }
+
     if (!isAuthenticated) {
         return (
             <div style={{ 
@@ -248,29 +322,100 @@ function AdminDashboard() {
     if (!customers.length) return <div>No customers found</div>
 
     return (
-        <div style={{ padding: '20px' }}>
-            <h1>Admin Dashboard</h1>
-            <div>
-                {customers.map(customer => renderCustomerCard(customer))}
+        <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+            <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '24px'
+            }}>
+                <h1 style={{ margin: 0 }}>Admin Dashboard</h1>
+                <button
+                    onClick={() => {
+                        localStorage.removeItem('adminAuth')
+                        setIsAuthenticated(false)
+                    }}
+                    style={{
+                        padding: "8px 16px",
+                        backgroundColor: "#EDF2F7",
+                        border: "none",
+                        borderRadius: "6px",
+                        color: "#4A5568",
+                        fontSize: "14px",
+                        cursor: "pointer"
+                    }}
+                >
+                    Logout
+                </button>
             </div>
-            <button
-                onClick={() => {
-                    localStorage.removeItem('adminAuth')
-                    setIsAuthenticated(false)
-                }}
-                style={{
-                    marginTop: "20px",
-                    padding: "8px 16px",
-                    backgroundColor: "#EDF2F7",
-                    border: "none",
-                    borderRadius: "6px",
-                    color: "#4A5568",
-                    fontSize: "14px",
-                    cursor: "pointer"
-                }}
-            >
-                Logout
-            </button>
+
+            {renderDashboardSummary()}
+
+            <div style={{ 
+                display: 'flex', 
+                gap: '16px', 
+                marginBottom: '24px',
+                alignItems: 'center'
+            }}>
+                <input
+                    type="text"
+                    placeholder="Search by address, service type, or phone"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    style={{
+                        padding: '8px 12px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '6px',
+                        flex: 1
+                    }}
+                />
+                <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as 'date' | 'price' | 'status')}
+                    style={{
+                        padding: '8px 12px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '6px'
+                    }}
+                >
+                    <option value="date">Sort by Date</option>
+                    <option value="price">Sort by Price</option>
+                    <option value="status">Sort by Status</option>
+                </select>
+                <button
+                    onClick={() => setSortOrder(order => order === 'asc' ? 'desc' : 'asc')}
+                    style={{
+                        padding: '8px 12px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '6px',
+                        backgroundColor: 'white',
+                        cursor: 'pointer'
+                    }}
+                >
+                    {sortOrder === 'asc' ? '↑' : '↓'}
+                </button>
+                <button
+                    onClick={() => setRefreshKey(k => k + 1)}
+                    style={{
+                        padding: '8px 12px',
+                        backgroundColor: '#4CAF50',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer'
+                    }}
+                >
+                    Refresh
+                </button>
+            </div>
+
+            <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                gap: '16px'
+            }}>
+                {filteredCustomers.map(customer => renderCustomerCard(customer))}
+            </div>
         </div>
     )
 }
