@@ -24,37 +24,14 @@ try:
     
     print("Connecting to MongoDB...", file=sys.stderr)
     
-    # Parse the MongoDB URI to add additional parameters
-    parsed_uri = urllib.parse.urlparse(mongo_uri)
-    query_dict = dict(urllib.parse.parse_qsl(parsed_uri.query))
-    
-    # Add or update parameters
-    query_dict.update({
-        'retryWrites': 'true',
-        'w': 'majority',
-        'directConnection': 'true'
-    })
-    
-    # Reconstruct the URI with updated parameters
-    new_query = urllib.parse.urlencode(query_dict)
-    new_uri = urllib.parse.urlunparse((
-        parsed_uri.scheme,
-        parsed_uri.netloc,
-        parsed_uri.path,
-        parsed_uri.params,
-        new_query,
-        parsed_uri.fragment
-    ))
-    
-    # Connect with updated URI and SSL settings
+    # Connect with SSL settings
     client = MongoClient(
-        new_uri,
+        mongo_uri,
         tls=True,
         tlsCAFile=certifi.where(),
-        serverSelectionTimeoutMS=30000,  # Increased timeout
+        serverSelectionTimeoutMS=30000,
         connectTimeoutMS=20000,
-        socketTimeoutMS=20000,
-        tlsAllowInvalidCertificates=True  # For testing only
+        socketTimeoutMS=20000
     )
     
     # Test the connection
