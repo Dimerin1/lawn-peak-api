@@ -28,7 +28,25 @@ def root():
 
 @app.route('/admin')
 def admin():
-    return jsonify({'message': 'Please use the admin dashboard at https://lawn-peak.vercel.app/admin'})
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Lawn Peak Admin</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
+        <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
+        <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    </head>
+    <body>
+        <div id="root"></div>
+        <script type="text/babel">
+            """ + open('AdminDashboard.tsx', 'r').read() + """
+            ReactDOM.render(<AdminDashboard />, document.getElementById('root'));
+        </script>
+    </body>
+    </html>
+    """
 
 @app.route('/charge-customer', methods=['POST'])
 def charge_customer():
