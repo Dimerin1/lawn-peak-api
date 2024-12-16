@@ -33,12 +33,22 @@ CORS(app, resources={
             "http://localhost:3000",
             "http://localhost:5000",
             "https://lawn-peak-git-main-dimerin1.vercel.app",
-            "https://lawn-peak.vercel.app"
+            "https://lawn-peak.vercel.app",
+            "https://lawn-peak.onrender.com",
+            "https://lawn-peak-api.onrender.com"
         ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
     }
 })
+
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
 
 # Configure Stripe
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
