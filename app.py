@@ -28,7 +28,7 @@ logger.info("Flask app created")
 CORS(app, 
     resources={
         r"/*": {
-            "origins": ["http://localhost:3000", "http://localhost:3001", "https://fabulous-screenshot-716549.framer.app"],
+            "origins": "*",
             "methods": ["GET", "POST", "OPTIONS"],
             "allow_headers": ["Content-Type"],
             "expose_headers": ["Content-Type"],
@@ -255,27 +255,45 @@ def create_setup_intent():
         error_response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
         return error_response, 400
 
-@app.route('/charge-customer', methods=['POST'])
+@app.route('/charge-customer', methods=['POST', 'OPTIONS'])
 def charge_customer():
+    # Handle preflight CORS request
+    if request.method == "OPTIONS":
+        response = make_response()
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
+        response.headers.add("Access-Control-Allow-Methods", "POST")
+        return response
+
     try:
+        logger.info("Received charge-customer request")
         data = request.json
+        logger.info(f"Request data: {data}")
+        
         customer_id = data.get('customer_id')
         amount = data.get('amount')  # Amount in dollars
         
         if not all([customer_id, amount]):
+            logger.error("Missing required fields")
             return jsonify({'error': 'Customer ID and amount are required'}), 400
 
         # Get customer's default payment method
+        logger.info(f"Retrieving customer {customer_id}")
         customer = stripe.Customer.retrieve(customer_id)
+        logger.info(f"Retrieved customer: {customer.id}")
+        
         payment_methods = stripe.PaymentMethod.list(
             customer=customer_id,
             type='card'
         )
+        logger.info(f"Found {len(payment_methods.data)} payment methods")
         
         if not payment_methods.data:
+            logger.error("No payment method found")
             return jsonify({'error': 'No payment method found for customer'}), 400
 
         # Create and confirm the payment intent
+        logger.info(f"Creating payment intent for amount {amount}")
         payment_intent = stripe.PaymentIntent.create(
             amount=int(float(amount) * 100),  # Convert to cents
             currency='usd',
@@ -285,34 +303,45 @@ def charge_customer():
             confirm=True,
             metadata=customer.metadata
         )
+        logger.info(f"Payment intent created: {payment_intent.id}")
         
-        # Update customer metadata to mark as charged and store charge date
-        current_time = time.strftime('%d.%m.%Y')
+        # Update customer metadata to store charge date
+        current_time = time.strftime('%d.%m.%Y %H:%M')  # Added time in 24-hour format
         customer_metadata = dict(customer.metadata)  # Convert from StripeObject to dict
-        customer_metadata.update({
-            'charged': 'true',
-            'charge_date': current_time
-        })
+        customer_metadata['charge_date'] = current_time
         
         # Update customer with new metadata
+        logger.info("Updating customer metadata")
         stripe.Customer.modify(
             customer_id,
             metadata=customer_metadata
         )
+        logger.info("Customer metadata updated")
         
-        return jsonify({
+        response = jsonify({
             'success': True,
             'payment_intent_id': payment_intent.id,
             'amount': amount,
             'status': payment_intent.status,
             'charge_date': current_time
         })
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        logger.info("Charge completed successfully")
+        return response
 
     except stripe.error.CardError as e:
-        return jsonify({'error': 'Card was declined', 'details': str(e)}), 400
+        logger.error(f"Card error: {str(e)}")
+        error_response = jsonify({'error': 'Card was declined', 'details': str(e)})
+        error_response.headers.add('Access-Control-Allow-Origin', '*')
+        error_response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        return error_response, 400
     except Exception as e:
-        print('Error charging customer:', str(e))
-        return jsonify({'error': 'An unexpected error occurred'}), 500
+        logger.error(f"Error charging customer: {str(e)}")
+        error_response = jsonify({'error': 'An unexpected error occurred', 'details': str(e)})
+        error_response.headers.add('Access-Control-Allow-Origin', '*')
+        error_response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        return error_response, 500
 
 @app.route('/webhook', methods=['POST'])
 def webhook():

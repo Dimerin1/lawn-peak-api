@@ -34,7 +34,14 @@ function AdminDashboard() {
     const [refreshKey, setRefreshKey] = React.useState(0)
 
     // API configuration
-    const API_BASE_URL = 'https://lawn-peak-api.onrender.com'
+    const API_BASE_URL = 'http://localhost:8080'
+
+    // Axios configuration with CORS headers
+    const axiosConfig = {
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    }
 
     // Simple authentication
     const handleLogin = async (e: React.FormEvent) => {
@@ -42,7 +49,7 @@ function AdminDashboard() {
         try {
             setLoading(true)
             setError(null)
-            const response = await axios.post(`${API_BASE_URL}/admin-login`, { password })
+            const response = await axios.post(`${API_BASE_URL}/admin-login`, { password }, axiosConfig)
             if (response.data.success) {
                 setIsAuthenticated(true)
                 localStorage.setItem('adminAuth', 'true')
@@ -80,7 +87,7 @@ function AdminDashboard() {
             setLoading(true)
             setError(null)
             
-            const response = await axios.get(`${API_BASE_URL}/list-customers`)
+            const response = await axios.get(`${API_BASE_URL}/list-customers`, axiosConfig)
             if (response.data.customers) {
                 setCustomers(response.data.customers)
                 setFilteredCustomers(response.data.customers)
@@ -155,14 +162,18 @@ function AdminDashboard() {
         }
         
         setChargingCustomerId(customerId)
+        setError(null)
         try {
+            console.log('Charging customer:', customerId, 'amount:', amount)
             const response = await axios.post(`${API_BASE_URL}/charge-customer`, { 
                 customer_id: customerId,
                 amount: amount
-            })
+            }, axiosConfig)
+
+            console.log('Charge response:', response.data)
 
             if (!response.data.success) {
-                throw new Error('Payment failed')
+                throw new Error(response.data.error || 'Payment failed')
             }
 
             // Update the customer's charged status in the local state
@@ -171,11 +182,9 @@ function AdminDashboard() {
                     customer.id === customerId
                         ? {
                             ...customer,
-                            charged: true,
                             metadata: {
                                 ...customer.metadata,
-                                charged: 'true',
-                                charge_date: response.data.charge_date // Use the date from backend response
+                                charge_date: response.data.charge_date
                             }
                         }
                         : customer
@@ -186,7 +195,18 @@ function AdminDashboard() {
             fetchCustomers()
         } catch (err) {
             console.error('Error charging customer:', err)
-            setError(err instanceof Error ? err.message : 'Failed to charge customer')
+            let errorMessage = 'Failed to charge customer'
+            if (axios.isAxiosError(err)) {
+                console.error('Axios error details:', {
+                    message: err.message,
+                    response: err.response?.data,
+                    status: err.response?.status
+                })
+                errorMessage = err.response?.data?.error || err.message
+            } else if (err instanceof Error) {
+                errorMessage = err.message
+            }
+            setError(errorMessage)
         } finally {
             setChargingCustomerId(null)
         }
@@ -198,7 +218,7 @@ function AdminDashboard() {
         }
 
         try {
-            const response = await axios.post(`${API_BASE_URL}/delete-all-customers`)
+            const response = await axios.post(`${API_BASE_URL}/delete-all-customers`, {}, axiosConfig)
 
             if (!response.data.success) {
                 throw new Error('Failed to delete customers')
@@ -220,6 +240,9 @@ function AdminDashboard() {
 
     const renderCustomerCard = (customer: Customer) => {
         const isCharging = chargingCustomerId === customer.id
+        const isRecurring = customer.metadata.payment_type === 'recurring' || 
+                           customer.metadata.payment_type === 'WEEKLY' || 
+                           customer.metadata.payment_type === 'BI_WEEKLY'
         
         return (
             <div key={customer.id} style={{
@@ -230,7 +253,7 @@ function AdminDashboard() {
                 backgroundColor: 'white'
             }}>
                 <div style={{ marginBottom: '8px' }}>
-                    <strong>Created:</strong> {new Date(customer.created * 1000).toLocaleDateString()}
+                    <strong>Created:</strong> {new Date(customer.created * 1000).toLocaleString()}
                 </div>
                 <div style={{ marginBottom: '8px' }}>
                     <strong>Service:</strong> {customer.metadata.service_type}
@@ -253,25 +276,26 @@ function AdminDashboard() {
                 {customer.metadata.charge_date && (
                     <div style={{ marginBottom: '8px' }}>
                         <strong>Last Charged:</strong> {customer.metadata.charge_date}
+                        <span style={{ color: '#666', fontSize: '0.9em' }}></span>
                     </div>
                 )}
                 {customer.has_payment_method && (
                     <button
                         onClick={() => handleChargeCustomer(customer.id, parseFloat(customer.metadata.price))}
-                        disabled={isCharging || customer.metadata.charged === 'true'}
+                        disabled={isCharging || (!isRecurring && customer.metadata.charged === 'true')}
                         style={{
                             padding: '8px 16px',
-                            backgroundColor: customer.metadata.charged === 'true' ? '#A0AEC0' : '#48BB78',
+                            backgroundColor: isCharging ? '#A0AEC0' : '#48BB78',
                             color: 'white',
                             border: 'none',
                             borderRadius: '6px',
-                            cursor: customer.metadata.charged === 'true' ? 'not-allowed' : 'pointer',
+                            cursor: isCharging ? 'not-allowed' : 'pointer',
                             display: 'flex',
                             alignItems: 'center',
                             gap: '8px'
                         }}
                     >
-                        {isCharging ? 'Processing...' : customer.metadata.charged === 'true' ? 'Charged' : 'Charge Customer'}
+                        {isCharging ? 'Processing...' : 'Charge Customer'}
                     </button>
                 )}
             </div>
