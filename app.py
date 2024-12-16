@@ -7,9 +7,6 @@ import pymongo
 from bson import ObjectId
 import json
 from datetime import datetime
-import certifi
-import ssl
-import dns.resolver
 import traceback
 
 # Debug: Print ALL environment variables at startup
@@ -25,12 +22,9 @@ CORS(app)
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
 try:
-    # Try to get MongoDB URI from Railway's internal connection URL
-    mongo_uri = "mongodb://mongo:YkeKKRagzqBMTVhwClvlMsHqJuzInRHT@junction.proxy.rlwy.net:26231"
-    print("Using hardcoded MongoDB URI for testing", file=sys.stderr)
-    
-    if not mongo_uri:
-        raise ValueError("MongoDB URI not found in environment variables")
+    # Get MongoDB URI - using Railway's internal connection
+    mongo_uri = "mongodb://mongo:YkeKKRagzqBMTVhwClvlMsHqJuzInRHT@mongodb.railway.internal:27017"
+    print(f"Using MongoDB URI: {mongo_uri}", file=sys.stderr)
     
     print("Connecting to MongoDB...", file=sys.stderr)
     client = pymongo.MongoClient(
@@ -48,21 +42,25 @@ try:
     
     # Get or create collections
     if 'payments' not in db.list_collection_names():
-        print("Creating payments collection...", file=sys.stderr)
         db.create_collection('payments')
-        print("Payments collection created!", file=sys.stderr)
+    if 'users' not in db.list_collection_names():
+        db.create_collection('users')
+    if 'services' not in db.list_collection_names():
+        db.create_collection('services')
     
     payments_collection = db['payments']
+    users_collection = db['users']
+    services_collection = db['services']
     
     # Create an index on customer_id if it doesn't exist
     payments_collection.create_index('customer_id', unique=True)
     
 except Exception as e:
-    print(f"MongoDB Connection Error: {str(e)}", file=sys.stderr)
-    print("Error Type:", type(e).__name__, file=sys.stderr)
-    print("Error Details:", str(e), file=sys.stderr)
-    print("Traceback:", file=sys.stderr)
-    traceback.print_exc(file=sys.stderr)
+    print("\nMongoDB Connection Error:", str(e), file=sys.stderr)
+    print("\nError Type:", type(e).__name__, file=sys.stderr)
+    print("\nError Details:", str(e), file=sys.stderr)
+    print("\nTraceback:", file=sys.stderr)
+    print(traceback.format_exc(), file=sys.stderr)
     raise e
 
 # Admin authentication
