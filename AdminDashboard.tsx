@@ -311,63 +311,92 @@ function AdminDashboard() {
         )
     }
 
-    if (!isAuthenticated) {
+    const renderLoginForm = () => {
         return (
-            <div style={{ 
-                maxWidth: "400px", 
-                margin: "40px auto", 
-                padding: "20px",
-                backgroundColor: "white",
-                borderRadius: "8px",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
+            <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                minHeight: '100vh',
+                backgroundColor: '#f7fafc'
             }}>
-                <h1 style={{ 
-                    fontSize: "24px", 
-                    marginBottom: "20px",
-                    fontWeight: "600",
-                    textAlign: "center"
+                <form onSubmit={handleLogin} style={{
+                    backgroundColor: 'white',
+                    padding: '2rem',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                    width: '100%',
+                    maxWidth: '400px'
                 }}>
-                    Admin Login
-                </h1>
-                <form onSubmit={handleLogin}>
+                    <h2 style={{ marginBottom: '1.5rem', textAlign: 'center' }}>Admin Login</h2>
                     <input
                         type="password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Enter admin password"
                         style={{
-                            width: "100%",
-                            padding: "12px",
-                            marginBottom: "16px",
-                            border: "1px solid #e2e8f0",
-                            borderRadius: "6px",
-                            fontSize: "16px"
+                            width: '100%',
+                            padding: '0.75rem',
+                            marginBottom: '1rem',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '6px'
                         }}
                     />
                     <button
                         type="submit"
+                        disabled={loading}
                         style={{
-                            width: "100%",
-                            padding: "12px",
-                            backgroundColor: "#FFC043",
-                            border: "none",
-                            borderRadius: "6px",
-                            color: "#000",
-                            fontSize: "16px",
-                            fontWeight: "500",
-                            cursor: "pointer"
+                            width: '100%',
+                            padding: '0.75rem',
+                            backgroundColor: loading ? '#cbd5e0' : '#4CAF50',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: loading ? 'not-allowed' : 'pointer'
                         }}
                     >
-                        Login
+                        {loading ? 'Logging in...' : 'Login'}
                     </button>
+                    {error && (
+                        <div style={{ color: 'red', marginTop: '1rem', textAlign: 'center' }}>
+                            {error}
+                        </div>
+                    )}
                 </form>
             </div>
         )
     }
 
-    if (loading) return <div>Loading customers...</div>
-    if (error) return <div style={{ color: 'red' }}>{error}</div>
-    if (!customers.length) return <div>No customers found</div>
+    if (!isAuthenticated) {
+        return renderLoginForm()
+    }
+
+    if (loading) {
+        return (
+            <div style={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center', 
+                minHeight: '100vh' 
+            }}>
+                Loading customers...
+            </div>
+        )
+    }
+
+    if (error && !customers.length) {
+        return (
+            <div style={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center', 
+                minHeight: '100vh',
+                color: 'red' 
+            }}>
+                {error}
+            </div>
+        )
+    }
 
     return (
         <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
