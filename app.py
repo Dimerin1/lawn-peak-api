@@ -404,30 +404,8 @@ def create_app():
         }
     })
 
-    # Register the blueprint
-    app.register_blueprint(api_bp, url_prefix='/api')
-
-    @app.route('/')
-    def home():
-        return jsonify({
-            'status': 'Lawn Peak Backend API is running',
-            'version': '1.0',
-            'routes': [str(rule) for rule in app.url_map.iter_rules()]
-        })
-
-    @app.route('/debug')
-    def debug():
-        return jsonify({
-            'env_vars': {
-                'FLASK_ENV': os.getenv('FLASK_ENV'),
-                'FLASK_APP': os.getenv('FLASK_APP'),
-                'PORT': os.getenv('PORT'),
-                'STRIPE_KEY_LENGTH': len(os.getenv('STRIPE_SECRET_KEY', '')) if os.getenv('STRIPE_SECRET_KEY') else 0
-            },
-            'routes': [str(rule) for rule in app.url_map.iter_rules()],
-            'stripe_key_present': bool(stripe.api_key),
-            'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
-        })
+    # Register the blueprint without url_prefix
+    app.register_blueprint(api_bp)
 
     @app.errorhandler(404)
     def not_found_error(error):
