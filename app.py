@@ -24,7 +24,21 @@ except ImportError:
     print("Google services not available. Some features might be limited.")
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+
+# Configure CORS with specific origins
+CORS(app, resources={
+    r"/*": {
+        "origins": [
+            "https://lawn-peak-production.up.railway.app",
+            "http://localhost:3000",
+            "http://localhost:5000",
+            "https://lawn-peak-git-main-dimerin1.vercel.app",
+            "https://lawn-peak.vercel.app"
+        ],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # Configure Stripe
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
@@ -128,12 +142,22 @@ def create_payment_intent():
 def create_setup_intent():
     try:
         data = request.json
+        print("Received setup intent request with data:", data)
         return_url = data.get('return_url')
         
         if not return_url:
+            print("Error: Return URL is required")
             return jsonify({'error': 'Return URL is required'}), 400
 
         # Create a Customer
+        print("Creating Stripe customer with metadata:", {
+            'service_type': data.get('service_type'),
+            'address': data.get('address'),
+            'lot_size': data.get('lot_size'),
+            'phone': data.get('phone'),
+            'price': str(data.get('price'))
+        })
+        
         customer = stripe.Customer.create(
             metadata={
                 'service_type': data.get('service_type'),
@@ -143,8 +167,10 @@ def create_setup_intent():
                 'price': str(data.get('price'))  # Store price for later charging
             }
         )
+        print("Created Stripe customer:", customer.id)
         
         # Create a Stripe Checkout Session for setup only
+        print("Creating Stripe checkout session for customer:", customer.id)
         session = stripe.checkout.Session.create(
             mode='setup',
             customer=customer.id,
@@ -168,6 +194,8 @@ def create_setup_intent():
                 }
             }
         )
+        print("Created Stripe checkout session:", session.id)
+        print("Session URL:", session.url)
         
         return jsonify({
             'setupIntentUrl': session.url
