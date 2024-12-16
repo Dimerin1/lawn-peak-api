@@ -20,7 +20,7 @@ stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
 try:
     # Get MongoDB URI from environment
-    mongo_uri = os.getenv('MONGODB_URI')
+    mongo_uri = os.environ.get('MONGODB_URI')
     if not mongo_uri:
         raise ValueError("MongoDB URI not found in environment variables")
     
