@@ -495,6 +495,201 @@ def delete_all_customers():
         print('Error deleting customers:', str(e))
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
+@app.route('/format-sheet', methods=['POST'])
+def format_sheet():
+    try:
+        logger.info("Creating Google Sheets service...")
+        service = get_sheets_service()
+        SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID', '19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA')
+
+        # First, get the current number of rows
+        result = service.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range='A:H'
+        ).execute()
+        values = result.get('values', [])
+        current_row = len(values)
+
+        if current_row == 0:
+            return jsonify({'message': 'Sheet is empty'}), 200
+
+        # Update headers
+        headers = [
+            'Timestamp',
+            'Customer Name',
+            'Email',
+            'Service Type',
+            'Phone Number',
+            'Address',
+            'Lot Size',
+            'Price ($)'
+        ]
+        
+        service.spreadsheets().values().update(
+            spreadsheetId=SPREADSHEET_ID,
+            range='A1:H1',
+            valueInputOption='USER_ENTERED',
+            body={'values': [headers]}
+        ).execute()
+
+        # Apply formatting
+        requests = [
+            # Format headers
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": 0,
+                        "endRowIndex": 1,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": 8
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "backgroundColor": {
+                                "red": 0.2,
+                                "green": 0.5,
+                                "blue": 0.3
+                            },
+                            "textFormat": {
+                                "bold": True,
+                                "foregroundColor": {
+                                    "red": 1.0,
+                                    "green": 1.0,
+                                    "blue": 1.0
+                                }
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat(backgroundColor,textFormat)"
+                }
+            },
+            # Alternate row colors
+            {
+                "addBanding": {
+                    "bandedRange": {
+                        "range": {
+                            "sheetId": 0,
+                            "startRowIndex": 1,
+                            "endRowIndex": current_row + 1,
+                            "startColumnIndex": 0,
+                            "endColumnIndex": 8
+                        },
+                        "rowProperties": {
+                            "headerColor": {
+                                "red": 0.9,
+                                "green": 0.9,
+                                "blue": 0.9
+                            },
+                            "firstBandColor": {
+                                "red": 1.0,
+                                "green": 1.0,
+                                "blue": 1.0
+                            },
+                            "secondBandColor": {
+                                "red": 0.95,
+                                "green": 0.95,
+                                "blue": 0.95
+                            }
+                        }
+                    }
+                }
+            },
+            # Add borders
+            {
+                "updateBorders": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": 0,
+                        "endRowIndex": current_row,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": 8
+                    },
+                    "top": {"style": "SOLID"},
+                    "bottom": {"style": "SOLID"},
+                    "left": {"style": "SOLID"},
+                    "right": {"style": "SOLID"},
+                    "innerHorizontal": {"style": "SOLID"},
+                    "innerVertical": {"style": "SOLID"}
+                }
+            },
+            # Auto-resize columns
+            {
+                "autoResizeDimensions": {
+                    "dimensions": {
+                        "sheetId": 0,
+                        "dimension": "COLUMNS",
+                        "startIndex": 0,
+                        "endIndex": 8
+                    }
+                }
+            },
+            # Format price column as currency
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": 1,
+                        "endRowIndex": current_row,
+                        "startColumnIndex": 7,
+                        "endColumnIndex": 8
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "numberFormat": {
+                                "type": "CURRENCY",
+                                "pattern": "$#,##0.00"
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat.numberFormat"
+                }
+            },
+            # Freeze header row
+            {
+                "updateSheetProperties": {
+                    "properties": {
+                        "sheetId": 0,
+                        "gridProperties": {
+                            "frozenRowCount": 1
+                        }
+                    },
+                    "fields": "gridProperties.frozenRowCount"
+                }
+            },
+            # Center align all cells
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": 0,
+                        "endRowIndex": current_row,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": 8
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "horizontalAlignment": "CENTER",
+                            "verticalAlignment": "MIDDLE"
+                        }
+                    },
+                    "fields": "userEnteredFormat(horizontalAlignment,verticalAlignment)"
+                }
+            }
+        ]
+
+        # Apply all formatting
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=SPREADSHEET_ID,
+            body={"requests": requests}
+        ).execute()
+
+        logger.info("Successfully formatted existing sheet")
+        return jsonify({'success': True, 'message': 'Sheet formatted successfully'})
+    except Exception as e:
+        logger.error(f"Error formatting sheet: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 # Google Sheets Integration
 def get_sheets_service():
     credentials = service_account.Credentials.from_service_account_info({
@@ -532,20 +727,184 @@ def append_to_sheet(data):
         
         logger.info(f"Prepared row data: {row}")
         
+        # First, get the current number of rows
+        result = service.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range='A:H'
+        ).execute()
+        values = result.get('values', [])
+        current_row = len(values) + 1
+
+        # If this is the first row, add headers
+        if current_row == 1:
+            headers = [
+                'Timestamp',
+                'Customer Name',
+                'Email',
+                'Service Type',
+                'Phone Number',
+                'Address',
+                'Lot Size',
+                'Price ($)'
+            ]
+            body = {
+                'values': [headers]
+            }
+            service.spreadsheets().values().append(
+                spreadsheetId=SPREADSHEET_ID,
+                range='A1:H1',
+                valueInputOption='USER_ENTERED',
+                insertDataOption='INSERT_ROWS',
+                body=body
+            ).execute()
+            current_row = 2
+
+        # Append the new row
         body = {
             'values': [row]
         }
-        
-        logger.info("Attempting to append row to sheet...")
-        result = service.spreadsheets().values().append(
+        service.spreadsheets().values().append(
             spreadsheetId=SPREADSHEET_ID,
             range='A:H',
             valueInputOption='USER_ENTERED',
             insertDataOption='INSERT_ROWS',
             body=body
         ).execute()
-        
-        logger.info(f"Successfully appended row. Result: {result}")
+
+        # Apply formatting
+        requests = [
+            # Format headers
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": 0,
+                        "endRowIndex": 1,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": 8
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "backgroundColor": {
+                                "red": 0.2,
+                                "green": 0.5,
+                                "blue": 0.3
+                            },
+                            "textFormat": {
+                                "bold": True,
+                                "foregroundColor": {
+                                    "red": 1.0,
+                                    "green": 1.0,
+                                    "blue": 1.0
+                                }
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat(backgroundColor,textFormat)"
+                }
+            },
+            # Alternate row colors
+            {
+                "addBanding": {
+                    "bandedRange": {
+                        "range": {
+                            "sheetId": 0,
+                            "startRowIndex": 1,
+                            "endRowIndex": current_row + 1,
+                            "startColumnIndex": 0,
+                            "endColumnIndex": 8
+                        },
+                        "rowProperties": {
+                            "headerColor": {
+                                "red": 0.9,
+                                "green": 0.9,
+                                "blue": 0.9
+                            },
+                            "firstBandColor": {
+                                "red": 1.0,
+                                "green": 1.0,
+                                "blue": 1.0
+                            },
+                            "secondBandColor": {
+                                "red": 0.95,
+                                "green": 0.95,
+                                "blue": 0.95
+                            }
+                        }
+                    }
+                }
+            },
+            # Add borders
+            {
+                "updateBorders": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": 0,
+                        "endRowIndex": current_row + 1,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": 8
+                    },
+                    "top": {"style": "SOLID"},
+                    "bottom": {"style": "SOLID"},
+                    "left": {"style": "SOLID"},
+                    "right": {"style": "SOLID"},
+                    "innerHorizontal": {"style": "SOLID"},
+                    "innerVertical": {"style": "SOLID"}
+                }
+            },
+            # Auto-resize columns
+            {
+                "autoResizeDimensions": {
+                    "dimensions": {
+                        "sheetId": 0,
+                        "dimension": "COLUMNS",
+                        "startIndex": 0,
+                        "endIndex": 8
+                    }
+                }
+            },
+            # Format price column as currency
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": 1,
+                        "endRowIndex": current_row + 1,
+                        "startColumnIndex": 7,
+                        "endColumnIndex": 8
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "numberFormat": {
+                                "type": "CURRENCY",
+                                "pattern": "$#,##0.00"
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat.numberFormat"
+                }
+            },
+            # Freeze header row
+            {
+                "updateSheetProperties": {
+                    "properties": {
+                        "sheetId": 0,
+                        "gridProperties": {
+                            "frozenRowCount": 1
+                        }
+                    },
+                    "fields": "gridProperties.frozenRowCount"
+                }
+            }
+        ]
+
+        # Apply all formatting
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=SPREADSHEET_ID,
+            body={"requests": requests}
+        ).execute()
+
+        logger.info("Successfully formatted sheet")
         return True
     except Exception as e:
         logger.error(f"Error appending to sheet: {str(e)}")
