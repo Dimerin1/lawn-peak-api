@@ -502,16 +502,35 @@ def format_sheet():
         service = get_sheets_service()
         SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID', '19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA')
 
-        # First, get the current number of rows
+        # First, get all values
         result = service.spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
             range='A:H'
         ).execute()
         values = result.get('values', [])
-        current_row = len(values)
 
-        if current_row == 0:
+        if len(values) == 0:
             return jsonify({'message': 'Sheet is empty'}), 200
+
+        # Remove empty rows and keep only non-empty ones
+        non_empty_rows = [row for row in values if any(cell.strip() for cell in row if cell)]
+        
+        # Clear the entire sheet first
+        service.spreadsheets().values().clear(
+            spreadsheetId=SPREADSHEET_ID,
+            range='A:H',
+            body={}
+        ).execute()
+
+        # Update with clean data
+        service.spreadsheets().values().update(
+            spreadsheetId=SPREADSHEET_ID,
+            range='A1',
+            valueInputOption='USER_ENTERED',
+            body={'values': non_empty_rows}
+        ).execute()
+
+        current_row = len(non_empty_rows)
 
         # Update headers
         headers = [
@@ -601,7 +620,7 @@ def format_sheet():
                     "range": {
                         "sheetId": 0,
                         "startRowIndex": 0,
-                        "endRowIndex": current_row,
+                        "endRowIndex": current_row + 1,
                         "startColumnIndex": 0,
                         "endColumnIndex": 8
                     },
@@ -630,7 +649,7 @@ def format_sheet():
                     "range": {
                         "sheetId": 0,
                         "startRowIndex": 1,
-                        "endRowIndex": current_row,
+                        "endRowIndex": current_row + 1,
                         "startColumnIndex": 7,
                         "endColumnIndex": 8
                     },
@@ -663,7 +682,7 @@ def format_sheet():
                     "range": {
                         "sheetId": 0,
                         "startRowIndex": 0,
-                        "endRowIndex": current_row,
+                        "endRowIndex": current_row + 1,
                         "startColumnIndex": 0,
                         "endColumnIndex": 8
                     },
