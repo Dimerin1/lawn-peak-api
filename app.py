@@ -236,11 +236,36 @@ def create_setup_intent():
 @app.route('/list-customers', methods=['GET'])
 def list_customers():
     try:
-        # Get Stripe account info for debugging
-        account = stripe.Account.retrieve()
+        # Debug info
+        logger.info("=== LIST CUSTOMERS ENDPOINT ===")
+        logger.info(f"Stripe Key Present: {bool(stripe.api_key)}")
+        if stripe.api_key:
+            logger.info(f"Stripe Key Last 4: {stripe.api_key[-4:]}")
+            logger.info(f"Stripe Key Length: {len(stripe.api_key)}")
         
-        # List all customers
-        customers = stripe.Customer.list(limit=100)
+        # Try to retrieve account info first
+        try:
+            account = stripe.Account.retrieve()
+            logger.info(f"Successfully retrieved Stripe account: {account.id}")
+        except Exception as e:
+            logger.error(f"Error retrieving Stripe account: {str(e)}")
+            return jsonify({
+                'error': 'Failed to retrieve Stripe account',
+                'details': str(e),
+                'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
+            }), 500
+        
+        # Now try to list customers
+        try:
+            customers = stripe.Customer.list(limit=100)
+            logger.info(f"Successfully retrieved {len(customers.data)} customers")
+        except Exception as e:
+            logger.error(f"Error listing customers: {str(e)}")
+            return jsonify({
+                'error': 'Failed to list customers',
+                'details': str(e),
+                'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
+            }), 500
         
         return jsonify({
             'success': True,
@@ -255,9 +280,10 @@ def list_customers():
             } for customer in customers.data]
         })
     except Exception as e:
-        print('Error listing customers:', str(e))
+        logger.error(f"Unexpected error in list_customers: {str(e)}")
         return jsonify({
-            'error': str(e),
+            'error': 'Unexpected error',
+            'details': str(e),
             'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
         }), 500
 
