@@ -545,8 +545,12 @@ def admin_login():
 @app.route('/list-customers', methods=['GET'])
 def list_customers():
     try:
+        print("MongoDB URI:", mongo_uri)  # Print the MongoDB URI (without credentials)
+        print("Attempting to fetch payments from MongoDB...")
+        
         # Get all payments from MongoDB
         payments = list(payments_collection.find())
+        print(f"Found {len(payments)} payments")
         
         # Convert MongoDB _id to string
         for payment in payments:
@@ -555,26 +559,33 @@ def list_customers():
         # Transform payments into customer format
         customers = []
         for payment in payments:
-            customer = {
-                'id': payment['_id'],
-                'created': payment.get('timestamp', 0),
-                'charged': payment.get('charged', False),
-                'metadata': {
-                    'service_type': payment.get('service_type', ''),
-                    'address': payment.get('address', ''),
-                    'lot_size': payment.get('lot_size', ''),
-                    'phone': payment.get('phone', ''),
-                    'agreed_price': str(payment.get('amount', 0)),
-                    'charged': str(payment.get('charged', False)).lower(),
-                    'charge_date': str(payment.get('charge_date', '')) if payment.get('charged') else None
+            try:
+                customer = {
+                    'id': payment['_id'],
+                    'created': payment.get('timestamp', 0),
+                    'charged': payment.get('charged', False),
+                    'metadata': {
+                        'service_type': payment.get('service_type', ''),
+                        'address': payment.get('address', ''),
+                        'lot_size': payment.get('lot_size', ''),
+                        'phone': payment.get('phone', ''),
+                        'agreed_price': str(payment.get('amount', 0)),
+                        'charged': str(payment.get('charged', False)).lower(),
+                        'charge_date': str(payment.get('charge_date', '')) if payment.get('charged') else None
+                    }
                 }
-            }
-            customers.append(customer)
+                customers.append(customer)
+            except Exception as e:
+                print(f"Error processing payment {payment.get('_id')}: {str(e)}")
+                continue
         
+        print(f"Processed {len(customers)} customers")
         return jsonify({'customers': customers})
     except Exception as e:
         print(f"Error fetching customers: {str(e)}")
-        return jsonify({'error': 'Failed to fetch customers'}), 500
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to fetch customers: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
