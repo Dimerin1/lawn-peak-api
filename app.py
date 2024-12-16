@@ -25,34 +25,22 @@ CORS(app)
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
 try:
-    # Try multiple possible environment variable names
-    possible_vars = [
-        'MONGODB_URI',
-        'MONGO_URI',
-        'MongoDB.MONGODB_URI',
-        'MongoDB_MONGODB_URI',
-        'RAILWAY_MONGODB_URI'
-    ]
-    
-    mongo_uri = None
-    for var in possible_vars:
-        value = os.environ.get(var)
-        print(f"Checking {var}: {'Found' if value else 'Not found'}", file=sys.stderr)
-        if value:
-            mongo_uri = value
-            print(f"Using MongoDB URI from {var}", file=sys.stderr)
-            break
+    # Try to get MongoDB URI from Railway's internal connection URL
+    mongo_uri = "mongodb://mongo:YkeKKRagzqBMTVhwClvlMsHqJuzInRHT@junction.proxy.rlwy.net:26231"
+    print("Using hardcoded MongoDB URI for testing", file=sys.stderr)
     
     if not mongo_uri:
-        raise ValueError("MongoDB URI not found in any of the expected environment variables")
+        raise ValueError("MongoDB URI not found in environment variables")
     
     print("Connecting to MongoDB...", file=sys.stderr)
     client = pymongo.MongoClient(
         mongo_uri,
-        serverSelectionTimeoutMS=5000  # 5 second timeout
+        serverSelectionTimeoutMS=5000,  # 5 second timeout
+        directConnection=True  # Force direct connection
     )
     
     # Test the connection
+    print("Testing connection...", file=sys.stderr)
     client.server_info()
     print("Successfully connected to MongoDB!", file=sys.stderr)
     
