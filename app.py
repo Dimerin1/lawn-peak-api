@@ -1,17 +1,22 @@
+import os
+import sys
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import stripe
-import os
-from dotenv import load_dotenv
-from pymongo import MongoClient
+import pymongo
+from bson import ObjectId
+import json
 from datetime import datetime
-import sys
 import certifi
 import ssl
 import dns.resolver
 import traceback
 
-load_dotenv()
+# Debug: Print environment variables immediately
+print("==== Environment Variables ====", file=sys.stderr)
+for key, value in os.environ.items():
+    print(f"'{key}': '{value}'", file=sys.stderr)
+print("============================", file=sys.stderr)
 
 app = Flask(__name__)
 CORS(app)
@@ -19,11 +24,6 @@ CORS(app)
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
 try:
-    # Debug: Print all environment variables
-    print("All environment variables:", file=sys.stderr)
-    for key, value in os.environ.items():
-        print(f"'{key}': '{value}'", file=sys.stderr)
-    
     # Try different possible MongoDB URI environment variables
     possible_vars = [
         'MONGODB_URI',
@@ -71,7 +71,7 @@ try:
     print(f"Using connection string: {mongo_uri}", file=sys.stderr)
     
     # Connect with explicit SSL context
-    client = MongoClient(
+    client = pymongo.MongoClient(
         mongo_uri,
         ssl=True,
         ssl_certfile=certifi.where(),
