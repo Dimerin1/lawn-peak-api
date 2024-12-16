@@ -12,11 +12,12 @@ import ssl
 import dns.resolver
 import traceback
 
-# Debug: Print environment variables immediately
-print("==== Environment Variables ====", file=sys.stderr)
-for key, value in os.environ.items():
-    print(f"'{key}': '{value}'", file=sys.stderr)
-print("============================", file=sys.stderr)
+# Debug: Print ALL environment variables at startup
+print("=== START OF ENVIRONMENT VARIABLES ===", file=sys.stderr)
+for key, value in sorted(os.environ.items()):
+    masked_value = '******' if any(secret in key.lower() for secret in ['key', 'password', 'token', 'secret', 'uri']) else value
+    print(f"{key}: {masked_value}", file=sys.stderr)
+print("=== END OF ENVIRONMENT VARIABLES ===", file=sys.stderr)
 
 app = Flask(__name__)
 CORS(app)
@@ -24,12 +25,26 @@ CORS(app)
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
 try:
-    # Get MongoDB URI from environment
-    mongo_uri = os.environ.get('MONGODB_URI')
-    print(f"Found MongoDB URI: {mongo_uri}", file=sys.stderr)
+    # Try multiple possible environment variable names
+    possible_vars = [
+        'MONGODB_URI',
+        'MONGO_URI',
+        'MongoDB.MONGODB_URI',
+        'MongoDB_MONGODB_URI',
+        'RAILWAY_MONGODB_URI'
+    ]
+    
+    mongo_uri = None
+    for var in possible_vars:
+        value = os.environ.get(var)
+        print(f"Checking {var}: {'Found' if value else 'Not found'}", file=sys.stderr)
+        if value:
+            mongo_uri = value
+            print(f"Using MongoDB URI from {var}", file=sys.stderr)
+            break
     
     if not mongo_uri:
-        raise ValueError("MongoDB URI not found in environment variables")
+        raise ValueError("MongoDB URI not found in any of the expected environment variables")
     
     print("Connecting to MongoDB...", file=sys.stderr)
     client = pymongo.MongoClient(
