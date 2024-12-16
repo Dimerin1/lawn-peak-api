@@ -183,6 +183,11 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         }
     };
 
+    // Get the base API URL based on environment
+    const API_BASE_URL = process.env.NODE_ENV === 'production' 
+        ? 'https://lawn-peak-api.onrender.com'
+        : 'http://localhost:8080'
+
     const handlePayment = async () => {
         setIsProcessingPayment(true)
         setPaymentError("")
@@ -196,7 +201,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 throw new Error('Please select lot size and service to get a quote first')
             }
 
-            const response = await fetch('https://lawn-peak-api.onrender.com/create-setup-intent', {
+            const response = await fetch(`${API_BASE_URL}/create-setup-intent`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

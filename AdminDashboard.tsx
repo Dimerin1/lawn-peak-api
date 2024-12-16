@@ -1,4 +1,5 @@
 import * as React from "react"
+import axios from 'axios'
 
 interface Customer {
     id: string
@@ -23,6 +24,7 @@ function AdminDashboard() {
     const [chargingCustomerId, setChargingCustomerId] = React.useState<string | null>(null)
     const [loading, setLoading] = React.useState(true)
     const [error, setError] = React.useState<string | null>(null)
+    const [success, setSuccess] = React.useState<string | null>(null)
     const [isAuthenticated, setIsAuthenticated] = React.useState(false)
     const [password, setPassword] = React.useState("")
     const [searchTerm, setSearchTerm] = React.useState("")
@@ -31,33 +33,20 @@ function AdminDashboard() {
     const [filterPaymentType, setFilterPaymentType] = React.useState<'all' | 'one_time' | 'recurring'>('all')
     const [refreshKey, setRefreshKey] = React.useState(0)
 
+    // Get the base API URL
+    const API_BASE_URL = 'http://localhost:8080'
+
     // Simple authentication
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
         try {
-            const response = await fetch('https://lawn-peak-api.onrender.com/admin-login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ password })
-            })
-            
-            if (!response.ok) {
-                const errorData = await response.json()
-                throw new Error(errorData.error || 'Login failed')
-            }
-            
-            const data = await response.json()
-            if (data.success) {
+            const response = await axios.post(`${API_BASE_URL}/admin-login`, { password })
+            if (response.data.success) {
                 setIsAuthenticated(true)
-                localStorage.setItem('adminAuth', 'true')
-            } else {
-                alert('Invalid password')
             }
         } catch (err) {
             console.error('Login error:', err)
-            alert(err instanceof Error ? err.message : 'Login failed. Please try again.')
+            setError(err instanceof Error ? err.message : 'Login failed')
         }
     }
 
@@ -67,17 +56,15 @@ function AdminDashboard() {
         setIsAuthenticated(isAuth)
     }, [])
 
+    // Fetch customers
     const fetchCustomers = async () => {
         try {
             setLoading(true)
             setError(null)
-            const response = await fetch('https://lawn-peak-api.onrender.com/list-customers')
-            if (!response.ok) {
-                throw new Error('Failed to fetch customers')
-            }
-            const data = await response.json()
-            setCustomers(data.customers)
-            setFilteredCustomers(data.customers)
+            
+            const response = await axios.get(`${API_BASE_URL}/list-customers`)
+            setCustomers(response.data.customers || [])
+            setFilteredCustomers(response.data.customers || [])
         } catch (err) {
             console.error('Error fetching customers:', err)
             setError(err instanceof Error ? err.message : 'Failed to fetch customers')
@@ -132,53 +119,43 @@ function AdminDashboard() {
         setFilteredCustomers(result)
     }, [customers, searchTerm, sortBy, sortOrder, filterPaymentType])
 
-    const handleCharge = async (customerId: string, amount: number) => {
-        if (!customerId) return
+    // Handle charging customer
+    const handleChargeCustomer = async (customerId: string, amount: number) => {
+        if (!customerId || amount <= 0) {
+            setError('Invalid customer ID or amount')
+            return
+        }
         
         setChargingCustomerId(customerId)
         try {
-            const response = await fetch(`https://lawn-peak-api.onrender.com/charge-customer`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    customer_id: customerId,
-                    amount: amount
-                })
+            const response = await axios.post(`${API_BASE_URL}/charge-customer`, { 
+                customer_id: customerId,
+                amount: amount
             })
 
-            if (!response.ok) {
-                const error = await response.json()
-                throw new Error(error.error || 'Failed to charge customer')
-            }
-
-            const data = await response.json()
-            if (!data.success) {
+            if (!response.data.success) {
                 throw new Error('Payment failed')
             }
 
-            // Update customers state with the new charge data
-            setCustomers(prev => 
-                prev.map(customer => 
+            // Update the customer's charged status in the local state
+            setCustomers(prevCustomers => 
+                prevCustomers.map(customer => 
                     customer.id === customerId
                         ? {
                             ...customer,
-                            charged: true,
                             metadata: {
                                 ...customer.metadata,
                                 charged: 'true',
-                                charge_date: data.charge_date.toString()
+                                charge_date: new Date().toISOString() // Use current date if not provided by backend
                             }
                         }
                         : customer
                 )
             )
-
-            alert('Payment collected successfully!')
+            setSuccess('Customer charged successfully')
         } catch (err) {
             console.error('Error charging customer:', err)
-            alert(err instanceof Error ? err.message : 'Failed to charge customer')
+            setError(err instanceof Error ? err.message : 'Failed to charge customer')
         } finally {
             setChargingCustomerId(null)
         }
@@ -190,16 +167,10 @@ function AdminDashboard() {
         }
 
         try {
-            const response = await fetch('https://lawn-peak-api.onrender.com/delete-all-customers', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                }
-            })
+            const response = await axios.post(`${API_BASE_URL}/delete-all-customers`)
 
-            if (!response.ok) {
-                const errorData = await response.json()
-                throw new Error(errorData.error || 'Failed to delete customers')
+            if (!response.data.success) {
+                throw new Error('Failed to delete customers')
             }
 
             // Refresh the customer list
@@ -235,49 +206,44 @@ function AdminDashboard() {
                 <div style={{ marginBottom: "8px" }}>
                     <strong>Created:</strong> {createdDate}
                 </div>
-                <div style={{ marginBottom: "8px" }}>
-                    <strong>Service Type:</strong> {metadata.service_type || 'N/A'}
+                <div style={{ marginBottom: '8px' }}>
+                    <strong>Service:</strong> {customer.metadata.service_type || 'N/A'}
                 </div>
-                <div style={{ marginBottom: "8px" }}>
-                    <strong>Payment Type:</strong> {metadata.payment_type || 'N/A'}
+                <div style={{ marginBottom: '8px' }}>
+                    <strong>Payment Type:</strong> {customer.metadata.payment_type || 'N/A'}
                 </div>
-                <div style={{ marginBottom: "8px" }}>
-                    <strong>Address:</strong> {metadata.address || 'N/A'}
+                <div style={{ marginBottom: '8px' }}>
+                    <strong>Price:</strong> ${customer.metadata.price || '0'}
                 </div>
-                <div style={{ marginBottom: "8px" }}>
-                    <strong>Lot Size:</strong> {metadata.lot_size || 'N/A'}
+                <div style={{ marginBottom: '8px' }}>
+                    <strong>Address:</strong> {customer.metadata.address || 'N/A'}
                 </div>
-                <div style={{ marginBottom: "8px" }}>
-                    <strong>Phone:</strong> {metadata.phone || 'N/A'}
+                <div style={{ marginBottom: '8px' }}>
+                    <strong>Phone:</strong> {customer.metadata.phone || 'N/A'}
                 </div>
-                <div style={{ marginBottom: "8px" }}>
-                    <strong>Price:</strong> {displayPrice}
+                <div style={{ marginBottom: '8px' }}>
+                    <strong>Lot Size:</strong> {customer.metadata.lot_size || 'N/A'} sq ft
                 </div>
-                <div style={{ marginBottom: "8px" }}>
-                    <strong>Payment Method:</strong> {customer.has_payment_method ? 'Added' : 'Not Added'}
-                </div>
-                <div style={{ marginBottom: "8px" }}>
-                    <strong>Status:</strong> {customer.charged ? 'Charged' : 'Not Charged'}
-                </div>
-                {metadata.charge_date && (
-                    <div style={{ marginBottom: "8px" }}>
-                        <strong>Charge Date:</strong> {metadata.charge_date}
+                {customer.metadata.charge_date && (
+                    <div style={{ marginBottom: '8px', color: 'green' }}>
+                        <strong>Last Charged:</strong> {new Date(customer.metadata.charge_date).toLocaleDateString()}
                     </div>
                 )}
-                {!customer.charged && customer.has_payment_method && (
+                {customer.has_payment_method && (
                     <button
-                        onClick={() => handleCharge(customer.id, parseFloat(customer.metadata.price))}
+                        onClick={() => handleChargeCustomer(customer.id, parseFloat(customer.metadata.price))}
+                        disabled={chargingCustomerId === customer.id}
                         style={{
                             padding: "8px 16px",
                             borderRadius: "4px",
+                            backgroundColor: chargingCustomerId === customer.id ? "#ccc" : "#4CAF50",
+                            color: "white",
                             border: "none",
-                            background: "#28a745",
-                            color: "#fff",
-                            cursor: "pointer",
+                            cursor: chargingCustomerId === customer.id ? "not-allowed" : "pointer",
                             marginTop: "8px"
                         }}
                     >
-                        Charge Customer
+                        {chargingCustomerId === customer.id ? "Processing..." : "Charge Customer"}
                     </button>
                 )}
             </div>
@@ -404,6 +370,17 @@ function AdminDashboard() {
             </div>
 
             {renderDashboardSummary()}
+
+            {error && (
+                <div style={{ color: 'red', marginBottom: '1rem' }}>
+                    {error}
+                </div>
+            )}
+            {success && (
+                <div style={{ color: 'green', marginBottom: '1rem' }}>
+                    {success}
+                </div>
+            )}
 
             <div style={{ 
                 display: 'flex', 
