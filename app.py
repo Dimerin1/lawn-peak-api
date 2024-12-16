@@ -8,6 +8,8 @@ from datetime import datetime
 import json
 import traceback
 
+print("Starting Lawn Peak API...", file=sys.stderr)
+
 app = Flask(__name__)
 CORS(app)
 
@@ -19,6 +21,7 @@ if not stripe.api_key:
 # Initialize SQLite database
 def init_db():
     try:
+        print("Initializing SQLite database...", file=sys.stderr)
         conn = sqlite3.connect('payments.db')
         c = conn.cursor()
         
@@ -661,6 +664,29 @@ def add_test_payment():
         print("Traceback:", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
         return jsonify({'error': str(e)}), 500
+
+@app.route('/create-setup-intent', methods=['POST', 'OPTIONS'])
+def create_setup_intent():
+    if request.method == 'OPTIONS':
+        # Handle CORS preflight request
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'POST')
+        return response
+
+    try:
+        setup_intent = stripe.SetupIntent.create()
+        return jsonify({
+            'clientSecret': setup_intent.client_secret
+        })
+    except Exception as e:
+        print(f"Error creating setup intent: {str(e)}", file=sys.stderr)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'healthy'})
 
 if __name__ == '__main__':
     app.run(debug=True)
