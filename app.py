@@ -682,11 +682,9 @@ def create_setup_intent():
         phone = data.get('phone')
         price = data.get('price')
 
-        # Create a PaymentIntent with amount 0 for setup
-        payment_intent = stripe.PaymentIntent.create(
-            amount=0,  # Amount in cents
-            currency='usd',
-            setup_future_usage='off_session',
+        # Create a SetupIntent for saving the payment method
+        setup_intent = stripe.SetupIntent.create(
+            usage='off_session',  # Allow the payment method to be used for future payments
             metadata={
                 'service_type': service_type,
                 'address': address,
@@ -697,14 +695,14 @@ def create_setup_intent():
         )
         
         response = jsonify({
-            'clientSecret': payment_intent.client_secret,
+            'clientSecret': setup_intent.client_secret,
             'futurePrice': price
         })
         response.headers.add('Access-Control-Allow-Origin', 'https://fabulous-screenshot-716470.framer.app')
         return response
 
     except Exception as e:
-        print(f"Error creating payment intent: {str(e)}", file=sys.stderr)
+        print(f"Error creating setup intent: {str(e)}", file=sys.stderr)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/health', methods=['GET'])

@@ -208,9 +208,8 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 throw new Error(data.error)
             }
 
-            // Redirect to Stripe Checkout with return URL
-            const returnUrl = encodeURIComponent(window.location.href)
-            window.location.href = `https://checkout.stripe.com/pay/${data.clientSecret}?return_url=${returnUrl}`
+            // Redirect to Stripe's hosted setup page
+            window.location.href = `https://checkout.stripe.com/setup/${data.clientSecret}`
             
         } catch (err) {
             console.error("Payment setup error:", err)
