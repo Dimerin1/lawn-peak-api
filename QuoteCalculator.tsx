@@ -188,7 +188,6 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         setPaymentError("")
         
         try {
-            // First, get the setup intent from our backend
             const response = await fetch('https://lawn-peak-api.onrender.com/create-setup-intent', {
                 method: 'POST',
                 headers: {
@@ -209,26 +208,9 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 throw new Error(data.error)
             }
 
-            // Load Stripe.js
-            const stripe = await loadStripe('your_publishable_key')
-            if (!stripe) throw new Error('Failed to load Stripe')
-
-            // Show the card collection form
-            const result = await stripe.confirmCardSetup(data.clientSecret, {
-                payment_method: {
-                    card: elements.getElement('card'),
-                    billing_details: {
-                        phone: formData.phone,
-                    },
-                },
-            })
-
-            if (result.error) {
-                throw new Error(result.error.message)
-            }
-
-            // Payment method successfully set up
-            alert(`Card successfully saved! You will be charged $${data.futurePrice} after the service is completed.`)
+            // Redirect to Stripe Checkout with return URL
+            const returnUrl = encodeURIComponent(window.location.href)
+            window.location.href = `https://checkout.stripe.com/pay/${data.clientSecret}?return_url=${returnUrl}`
             
         } catch (err) {
             console.error("Payment setup error:", err)
@@ -239,13 +221,26 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
     }
 
     const PriceDisplay = () => (
-        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-            <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
+        <div style={{ textAlign: 'center', marginBottom: '20px', padding: '20px', backgroundColor: '#f7fafc', borderRadius: '12px' }}>
+            <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px' }}>
                 Estimated Price: {priceDisplay}
             </div>
-            <div style={{ color: '#666', fontSize: '14px', marginTop: '5px' }}>
+            <div style={{ color: '#4A5568', fontSize: '14px', padding: '10px', backgroundColor: 'rgba(74, 85, 104, 0.1)', borderRadius: '8px' }}>
                 You will only be charged after the service is completed
             </div>
+            {(formData.service === 'WEEKLY' || formData.service === 'BI_WEEKLY') && (
+                <div style={{ 
+                    display: 'inline-block',
+                    backgroundColor: '#48BB78',
+                    color: 'white',
+                    padding: '4px 12px',
+                    borderRadius: '9999px',
+                    fontSize: '14px',
+                    marginTop: '10px'
+                }}>
+                    Save {formData.service === 'WEEKLY' ? '25%' : '15%'}
+                </div>
+            )}
         </div>
     )
 
@@ -384,51 +379,6 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     )}
                 </>
             )}
-
-            <style>
-                {`
-                    @keyframes fadeIn {
-                        from { opacity: 0; transform: translateY(-10px); }
-                        to { opacity: 1; transform: translateY(0); }
-                    }
-                    
-                    .price-container {
-                        background-color: #f7fafc;
-                        padding: 24px;
-                        border-radius: 12px;
-                        text-align: center;
-                        animation: fadeIn 0.3s ease-out;
-                    }
-                    
-                    .price-title {
-                        color: #4a5568;
-                        font-size: 16px;
-                        margin-bottom: 8px;
-                    }
-                    
-                    .price-amount {
-                        color: #2d3748;
-                        font-size: 36px;
-                        font-weight: 700;
-                    }
-                    
-                    .savings-badge {
-                        display: inline-block;
-                        background-color: #48bb78;
-                        color: white;
-                        padding: 4px 12px;
-                        border-radius: 9999px;
-                        font-size: 14px;
-                        margin-top: 8px;
-                    }
-                    
-                    .price-description {
-                        color: #718096;
-                        font-size: 14px;
-                        margin-top: 8px;
-                    }
-                `}
-            </style>
         </div>
     )
 }
