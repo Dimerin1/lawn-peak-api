@@ -218,35 +218,30 @@ def create_setup_intent():
 @app.route('/list-customers', methods=['GET'])
 def list_customers():
     try:
-        # Fetch all customers from Stripe
-        customers = stripe.Customer.list(limit=100)
+        # Get Stripe account info for debugging
+        account = stripe.Account.retrieve()
         
-        # Format customer data
-        formatted_customers = []
-        for customer in customers.data:
-            if customer.metadata:  # Only include customers with metadata
-                formatted_customers.append({
-                    'id': customer.id,
-                    'metadata': {
-                        'service_type': customer.metadata.get('service_type', ''),
-                        'address': customer.metadata.get('address', ''),
-                        'lot_size': customer.metadata.get('lot_size', ''),
-                        'phone': customer.metadata.get('phone', ''),
-                        'agreed_price': customer.metadata.get('price', '0'),
-                        'charge_date': customer.metadata.get('charge_date', '')
-                    },
-                    'created': customer.created,
-                    'charged': bool(customer.metadata.get('charge_date'))
-                })
+        # List all customers
+        customers = stripe.Customer.list(limit=100)
         
         return jsonify({
             'success': True,
-            'customers': formatted_customers
+            'stripe_account_id': account.id,
+            'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None,
+            'customers': [{
+                'id': customer.id,
+                'created': customer.created,
+                'metadata': customer.metadata,
+                'has_payment_method': bool(customer.invoice_settings.default_payment_method) if customer.invoice_settings else False,
+                'charged': bool(customer.metadata.get('charged', False))
+            } for customer in customers.data]
         })
-
     except Exception as e:
-        print('Error fetching customers:', str(e))
-        return jsonify({'error': str(e)}), 500
+        print('Error listing customers:', str(e))
+        return jsonify({
+            'error': str(e),
+            'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
+        }), 500
 
 @app.route('/charge-customer', methods=['POST'])
 def charge_customer():
@@ -280,7 +275,7 @@ def charge_customer():
         )
         
         # Update customer metadata to mark as charged
-        customer.metadata['charge_date'] = str(int(time.time()))
+        customer.metadata['charged'] = True
         customer.save()
         
         return jsonify({
