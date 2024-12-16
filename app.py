@@ -3,10 +3,9 @@ import sys
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import stripe
-import pymongo
-from bson import ObjectId
-import json
+import sqlite3
 from datetime import datetime
+import json
 import traceback
 
 # Debug: Print ALL environment variables at startup
@@ -21,70 +20,40 @@ CORS(app)
 
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
+# Initialize SQLite database
+def init_db():
+    conn = sqlite3.connect('payments.db')
+    c = conn.cursor()
+    
+    # Create payments table if it doesn't exist
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS payments (
+            id TEXT PRIMARY KEY,
+            customer_id TEXT UNIQUE,
+            address TEXT,
+            service_type TEXT,
+            phone TEXT,
+            agreed_price REAL,
+            charged BOOLEAN DEFAULT FALSE,
+            created TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    conn.commit()
+    conn.close()
+
 try:
-    # Try Railway's MongoDB URI first, fallback to Atlas if not available
-    mongo_uri = os.getenv('MONGODB_URI', "mongodb+srv://jakubsmalmail:fWo3w3U5KLtdeONq@lawnpeak.l6fbe.mongodb.net/lawn-peak?retryWrites=true&w=majority")
-    print("Connecting to MongoDB...", file=sys.stderr)
-    
-    # Parse the URI to ensure no SSL options
-    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
-    
-    # Parse the URI
-    parsed = urlparse(mongo_uri)
-    
-    # Get the query parameters
-    params = parse_qs(parsed.query)
-    
-    # Remove any SSL-related parameters
-    ssl_params = ['ssl', 'ssl_cert_reqs', 'ssl_ca_certs', 'ssl_certfile']
-    for param in ssl_params:
-        if param in params:
-            del params[param]
-    
-    # Rebuild the URI without SSL parameters
-    clean_query = urlencode(params, doseq=True)
-    clean_uri = urlunparse((
-        parsed.scheme,
-        parsed.netloc,
-        parsed.path,
-        parsed.params,
-        clean_query,
-        parsed.fragment
-    ))
-    
-    print(f"Using clean MongoDB URI (credentials masked)...", file=sys.stderr)
-    
-    client = pymongo.MongoClient(clean_uri)
-    
-    # Test the connection
-    print("Testing connection...", file=sys.stderr)
-    client.server_info()
-    print("Successfully connected to MongoDB!", file=sys.stderr)
-    
-    db = client.lawn_peak
-    
-    # Get or create collections
-    if 'payments' not in db.list_collection_names():
-        db.create_collection('payments')
-    if 'users' not in db.list_collection_names():
-        db.create_collection('users')
-    if 'services' not in db.list_collection_names():
-        db.create_collection('services')
-    
-    payments_collection = db['payments']
-    users_collection = db['users']
-    services_collection = db['services']
-    
-    # Create an index on customer_id if it doesn't exist
-    payments_collection.create_index('customer_id', unique=True)
-    
+    init_db()
+    print("Database initialized successfully!", file=sys.stderr)
 except Exception as e:
-    print("\nMongoDB Connection Error:", str(e), file=sys.stderr)
-    print("\nError Type:", type(e).__name__, file=sys.stderr)
-    print("\nError Details:", str(e), file=sys.stderr)
-    print("\nTraceback:", file=sys.stderr)
-    print(traceback.format_exc(), file=sys.stderr)
+    print("Database initialization error:", str(e), file=sys.stderr)
     raise e
+
+def dict_factory(cursor, row):
+    d = {}
+    for idx, col in enumerate(cursor.description):
+        d[col[0]] = row[idx]
+    return d
 
 # Admin authentication
 ADMIN_PASSWORD = "Qwe123asd456!@"
@@ -538,7 +507,12 @@ def charge_customer():
             return jsonify({'error': 'Customer ID and amount are required'}), 400
 
         # Check if customer has already been charged
-        if payments_collection.find_one({'customer_id': customer_id}):
+        conn = sqlite3.connect('payments.db')
+        conn.row_factory = dict_factory
+        c = conn.cursor()
+        c.execute('SELECT * FROM payments WHERE customer_id = ?', (customer_id,))
+        payment = c.fetchone()
+        if payment:
             return jsonify({'error': 'Customer has already been charged'}), 400
 
         # Get customer data from Stripe
@@ -562,32 +536,29 @@ def charge_customer():
         )
 
         if payment_intent.status == 'succeeded':
-            # Store payment record in MongoDB
-            payment_record = {
-                'customer_id': customer_id,
-                'amount': amount,
-                'charge_date': datetime.utcnow(),
-                'stripe_payment_id': payment_intent.id
-            }
-            payments_collection.insert_one(payment_record)
-
-            # Update customer metadata in Stripe
-            current_time = int(datetime.utcnow().timestamp())
-            metadata = dict(customer.metadata or {})
-            metadata['charged'] = 'true'
-            metadata['charge_date'] = str(current_time)
-            
-            stripe.Customer.modify(
+            # Store payment record in SQLite
+            c.execute('''
+                INSERT INTO payments (id, customer_id, address, service_type, phone, agreed_price, charged, created)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
                 customer_id,
-                metadata=metadata
-            )
-            
+                customer_id,
+                customer.address,
+                customer.service_type,
+                customer.phone,
+                amount,
+                True,
+                datetime.utcnow()
+            ))
+            conn.commit()
+            conn.close()
+
             return jsonify({
                 'success': True,
                 'payment_intent_id': payment_intent.id,
                 'amount': amount,
                 'status': payment_intent.status,
-                'charge_date': current_time
+                'charge_date': int(datetime.utcnow().timestamp())
             })
         else:
             return jsonify({'error': 'Payment failed', 'status': payment_intent.status}), 400
@@ -616,45 +587,31 @@ def admin_login():
 @app.route('/list-customers', methods=['GET'])
 def list_customers():
     try:
-        print("MongoDB URI:", mongo_uri)  # Print the MongoDB URI (without credentials)
-        print("Attempting to fetch payments from MongoDB...")
-        
-        # Get all payments from MongoDB
-        payments = list(payments_collection.find())
-        print(f"Found {len(payments)} payments")
-        
-        # Convert MongoDB _id to string
-        for payment in payments:
-            payment['_id'] = str(payment['_id'])
+        conn = sqlite3.connect('payments.db')
+        conn.row_factory = dict_factory
+        c = conn.cursor()
+        c.execute('SELECT * FROM payments')
+        payments = c.fetchall()
+        conn.close()
         
         # Transform payments into customer format
         customers = []
         for payment in payments:
-            try:
-                customer = {
-                    'id': payment['_id'],
-                    'created': payment.get('timestamp', 0),
-                    'charged': payment.get('charged', False),
-                    'metadata': {
-                        'service_type': payment.get('service_type', ''),
-                        'address': payment.get('address', ''),
-                        'lot_size': payment.get('lot_size', ''),
-                        'phone': payment.get('phone', ''),
-                        'agreed_price': str(payment.get('amount', 0)),
-                        'charged': str(payment.get('charged', False)).lower(),
-                        'charge_date': str(payment.get('charge_date', '')) if payment.get('charged') else None
-                    }
+            customer = {
+                'id': payment['id'],
+                'created': int(payment['created'].timestamp()),
+                'charged': payment['charged'],
+                'metadata': {
+                    'service_type': payment['service_type'],
+                    'address': payment['address'],
+                    'phone': payment['phone'],
+                    'agreed_price': str(payment['agreed_price']),
+                    'charged': str(payment['charged']).lower(),
+                    'charge_date': str(int(payment['created'].timestamp())) if payment['charged'] else None
                 }
-                customers.append(customer)
-            except Exception as e:
-                print(f"Error processing payment {payment.get('_id')}: {str(e)}", file=sys.stderr)
-                print("Error Type:", type(e).__name__, file=sys.stderr)
-                print("Error Details:", str(e), file=sys.stderr)
-                print("Traceback:", file=sys.stderr)
-                traceback.print_exc(file=sys.stderr)
-                continue
+            }
+            customers.append(customer)
         
-        print(f"Processed {len(customers)} customers")
         return jsonify({'customers': customers})
     except Exception as e:
         print(f"Error fetching customers: {str(e)}", file=sys.stderr)
@@ -670,21 +627,30 @@ def add_test_payment():
         # Add a test payment
         test_payment = {
             'customer_id': 'test_customer_1',
-            'timestamp': int(datetime.now().timestamp()),
-            'charged': False,
-            'service_type': 'Lawn Mowing',
             'address': '123 Test St, Test City',
-            'lot_size': 'Medium',
+            'service_type': 'Lawn Mowing',
             'phone': '555-0123',
-            'amount': 50.00
+            'agreed_price': 50.00
         }
         
         # Insert or update the test payment
-        result = payments_collection.update_one(
-            {'customer_id': test_payment['customer_id']},
-            {'$set': test_payment},
-            upsert=True
-        )
+        conn = sqlite3.connect('payments.db')
+        c = conn.cursor()
+        c.execute('''
+            INSERT OR REPLACE INTO payments (id, customer_id, address, service_type, phone, agreed_price, charged, created)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            test_payment['customer_id'],
+            test_payment['customer_id'],
+            test_payment['address'],
+            test_payment['service_type'],
+            test_payment['phone'],
+            test_payment['agreed_price'],
+            False,
+            datetime.utcnow()
+        ))
+        conn.commit()
+        conn.close()
         
         return jsonify({
             'success': True,
