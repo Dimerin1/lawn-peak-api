@@ -33,7 +33,7 @@ function AdminDashboard() {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
         try {
-            const response = await fetch('https://lawn-peak-production.up.railway.app/admin-login', {
+            const response = await fetch('https://lawn-peak-api.onrender.com/admin-login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -69,7 +69,7 @@ function AdminDashboard() {
         try {
             setLoading(true)
             setError(null)
-            const response = await fetch('https://lawn-peak-production.up.railway.app/list-customers')
+            const response = await fetch('https://lawn-peak-api.onrender.com/list-customers')
             if (!response.ok) {
                 throw new Error('Failed to fetch customers')
             }
@@ -128,7 +128,7 @@ function AdminDashboard() {
         
         setChargingCustomerId(customerId)
         try {
-            const response = await fetch('https://lawn-peak-production.up.railway.app/charge-customer', {
+            const response = await fetch(`https://lawn-peak-api.onrender.com/charge-customer`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
