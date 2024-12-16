@@ -536,6 +536,30 @@ def format_sheet():
         service = get_sheets_service()
         SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID', '19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA')
 
+        # Get spreadsheet metadata to find existing bandings
+        spreadsheet = service.spreadsheets().get(
+            spreadsheetId=SPREADSHEET_ID,
+            fields='sheets.bandedRanges'
+        ).execute()
+
+        # Remove all existing bandings
+        if 'sheets' in spreadsheet and spreadsheet['sheets']:
+            sheet = spreadsheet['sheets'][0]
+            if 'bandedRanges' in sheet:
+                remove_banding_requests = []
+                for banded_range in sheet['bandedRanges']:
+                    remove_banding_requests.append({
+                        "removeBanding": {
+                            "bandedRangeId": banded_range.get('bandedRangeId')
+                        }
+                    })
+                
+                if remove_banding_requests:
+                    service.spreadsheets().batchUpdate(
+                        spreadsheetId=SPREADSHEET_ID,
+                        body={"requests": remove_banding_requests}
+                    ).execute()
+
         # First, get all values
         result = service.spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
@@ -566,34 +590,24 @@ def format_sheet():
 
         current_row = len(non_empty_rows)
 
-        # First, remove all existing formatting and banding
-        clear_requests = [
-            {
-                "updateCells": {
-                    "range": {
-                        "sheetId": 0,
-                        "startRowIndex": 0,
-                        "endRowIndex": current_row + 1,
-                        "startColumnIndex": 0,
-                        "endColumnIndex": 9
-                    },
-                    "fields": "userEnteredFormat"
-                }
-            },
-            {
-                "removeBanding": {
-                    "bandedRangeId": 0
-                }
+        # Clear all formatting
+        clear_format_request = {
+            "updateCells": {
+                "range": {
+                    "sheetId": 0,
+                    "startRowIndex": 0,
+                    "endRowIndex": current_row + 1,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": 9
+                },
+                "fields": "userEnteredFormat"
             }
-        ]
+        }
 
-        try:
-            service.spreadsheets().batchUpdate(
-                spreadsheetId=SPREADSHEET_ID,
-                body={"requests": clear_requests}
-            ).execute()
-        except Exception as e:
-            logger.warning(f"Error clearing formatting (this is expected if no banding exists): {str(e)}")
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=SPREADSHEET_ID,
+            body={"requests": [clear_format_request]}
+        ).execute()
 
         # Update headers
         headers = [
