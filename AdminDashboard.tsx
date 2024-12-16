@@ -4,10 +4,11 @@ interface Customer {
     id: string
     metadata: {
         service_type: string
+        payment_type: string
         address: string
         lot_size: string
         phone: string
-        agreed_price: string
+        price: string
         charged: string
         charge_date: string
     }
@@ -27,6 +28,7 @@ function AdminDashboard() {
     const [searchTerm, setSearchTerm] = React.useState("")
     const [sortBy, setSortBy] = React.useState<'date' | 'price' | 'status'>('date')
     const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc')
+    const [filterPaymentType, setFilterPaymentType] = React.useState<'all' | 'one_time' | 'recurring'>('all')
     const [refreshKey, setRefreshKey] = React.useState(0)
 
     // Simple authentication
@@ -91,6 +93,13 @@ function AdminDashboard() {
     React.useEffect(() => {
         let result = [...customers]
         
+        // Apply payment type filter
+        if (filterPaymentType !== 'all') {
+            result = result.filter(customer => 
+                customer.metadata.payment_type === filterPaymentType
+            )
+        }
+        
         // Apply search filter
         if (searchTerm) {
             result = result.filter(customer => 
@@ -109,8 +118,8 @@ function AdminDashboard() {
                         : b.created - a.created
                 case 'price':
                     return sortOrder === 'asc'
-                        ? parseFloat(a.metadata.agreed_price) - parseFloat(b.metadata.agreed_price)
-                        : parseFloat(b.metadata.agreed_price) - parseFloat(a.metadata.agreed_price)
+                        ? parseFloat(a.metadata.price) - parseFloat(b.metadata.price)
+                        : parseFloat(b.metadata.price) - parseFloat(a.metadata.price)
                 case 'status':
                     return sortOrder === 'asc'
                         ? (a.charged === b.charged ? 0 : a.charged ? 1 : -1)
@@ -121,7 +130,7 @@ function AdminDashboard() {
         })
         
         setFilteredCustomers(result)
-    }, [customers, searchTerm, sortBy, sortOrder])
+    }, [customers, searchTerm, sortBy, sortOrder, filterPaymentType])
 
     const handleCharge = async (customerId: string, amount: number) => {
         if (!customerId) return
@@ -175,57 +184,102 @@ function AdminDashboard() {
         }
     }
 
+    const handleDeleteAllCustomers = async () => {
+        if (!window.confirm('Are you sure you want to delete ALL customers? This cannot be undone!')) {
+            return
+        }
+
+        try {
+            const response = await fetch('https://lawn-peak-api.onrender.com/delete-all-customers', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json()
+                throw new Error(errorData.error || 'Failed to delete customers')
+            }
+
+            // Refresh the customer list
+            setRefreshKey(prev => prev + 1)
+        } catch (err) {
+            console.error('Error deleting customers:', err)
+            alert(err instanceof Error ? err.message : 'Failed to delete customers')
+        }
+    }
+
+    const formatPrice = (price: string | undefined): string => {
+        if (!price) return '$0.00'
+        const numericPrice = parseFloat(price)
+        return isNaN(numericPrice) ? '$0.00' : `$${numericPrice.toFixed(2)}`
+    }
+
     const renderCustomerCard = (customer: Customer) => {
         if (!customer) return null
 
-        const isCharging = chargingCustomerId === customer.id
-        const chargeDate = customer.metadata.charge_date 
-            ? new Date(parseInt(customer.metadata.charge_date) * 1000).toLocaleDateString()
-            : null
+        const metadata = customer.metadata || {}
+        const createdDate = new Date(customer.created * 1000).toLocaleDateString()
+        const displayPrice = formatPrice(metadata.price)
 
         return (
             <div key={customer.id} style={{
-                border: '1px solid #ddd',
-                borderRadius: '8px',
-                padding: '16px',
-                margin: '8px 0',
-                backgroundColor: customer.charged ? '#f8f8f8' : 'white'
+                border: "1px solid #ddd",
+                borderRadius: "8px",
+                padding: "16px",
+                marginBottom: "16px",
+                backgroundColor: "#fff",
+                boxShadow: "0 2px 4px rgba(0,0,0,0.05)"
             }}>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Service Type:</strong> {customer.metadata.service_type}
+                <div style={{ marginBottom: "8px" }}>
+                    <strong>Created:</strong> {createdDate}
                 </div>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Address:</strong> {customer.metadata.address}
+                <div style={{ marginBottom: "8px" }}>
+                    <strong>Service Type:</strong> {metadata.service_type || 'N/A'}
                 </div>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Lot Size:</strong> {customer.metadata.lot_size}
+                <div style={{ marginBottom: "8px" }}>
+                    <strong>Payment Type:</strong> {metadata.payment_type || 'N/A'}
                 </div>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Phone:</strong> {customer.metadata.phone}
+                <div style={{ marginBottom: "8px" }}>
+                    <strong>Address:</strong> {metadata.address || 'N/A'}
                 </div>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Price:</strong> ${customer.metadata.agreed_price}
+                <div style={{ marginBottom: "8px" }}>
+                    <strong>Lot Size:</strong> {metadata.lot_size || 'N/A'}
                 </div>
-                {customer.charged && chargeDate && (
-                    <div style={{ marginBottom: '8px', color: 'green' }}>
-                        <strong>Payment Status:</strong> Paid on {chargeDate}
+                <div style={{ marginBottom: "8px" }}>
+                    <strong>Phone:</strong> {metadata.phone || 'N/A'}
+                </div>
+                <div style={{ marginBottom: "8px" }}>
+                    <strong>Price:</strong> {displayPrice}
+                </div>
+                <div style={{ marginBottom: "8px" }}>
+                    <strong>Payment Method:</strong> {customer.has_payment_method ? 'Added' : 'Not Added'}
+                </div>
+                <div style={{ marginBottom: "8px" }}>
+                    <strong>Status:</strong> {customer.charged ? 'Charged' : 'Not Charged'}
+                </div>
+                {metadata.charge_date && (
+                    <div style={{ marginBottom: "8px" }}>
+                        <strong>Charge Date:</strong> {metadata.charge_date}
                     </div>
                 )}
-                <button
-                    onClick={() => handleCharge(customer.id, parseFloat(customer.metadata.agreed_price))}
-                    disabled={isCharging || customer.charged}
-                    style={{
-                        padding: '8px 16px',
-                        backgroundColor: customer.charged ? '#cccccc' : '#4CAF50',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: customer.charged ? 'not-allowed' : 'pointer',
-                        opacity: isCharging ? 0.7 : 1
-                    }}
-                >
-                    {isCharging ? 'Processing...' : customer.charged ? 'Payment Collected' : 'Collect Payment'}
-                </button>
+                {!customer.charged && customer.has_payment_method && (
+                    <button
+                        onClick={() => handleCharge(customer.id, parseFloat(customer.metadata.price))}
+                        style={{
+                            padding: "8px 16px",
+                            borderRadius: "4px",
+                            border: "none",
+                            background: "#28a745",
+                            color: "#fff",
+                            cursor: "pointer",
+                            marginTop: "8px"
+                        }}
+                    >
+                        Charge Customer
+                    </button>
+                )}
             </div>
         )
     }
@@ -235,7 +289,7 @@ function AdminDashboard() {
         const paidCustomers = customers.filter(c => c.charged).length
         const totalRevenue = customers
             .filter(c => c.charged)
-            .reduce((sum, c) => sum + parseFloat(c.metadata.agreed_price), 0)
+            .reduce((sum, c) => sum + parseFloat(c.metadata.price), 0)
 
         return (
             <div style={{
@@ -370,6 +424,19 @@ function AdminDashboard() {
                     }}
                 />
                 <select
+                    value={filterPaymentType}
+                    onChange={(e) => setFilterPaymentType(e.target.value as 'all' | 'one_time' | 'recurring')}
+                    style={{
+                        padding: '8px 12px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '6px'
+                    }}
+                >
+                    <option value="all">All Payment Types</option>
+                    <option value="one_time">One-time</option>
+                    <option value="recurring">Recurring</option>
+                </select>
+                <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value as 'date' | 'price' | 'status')}
                     style={{
@@ -406,6 +473,19 @@ function AdminDashboard() {
                     }}
                 >
                     Refresh
+                </button>
+                <button
+                    onClick={handleDeleteAllCustomers}
+                    style={{
+                        padding: "8px 16px",
+                        borderRadius: "4px",
+                        border: "none",
+                        background: "#dc3545",
+                        color: "#fff",
+                        cursor: "pointer"
+                    }}
+                >
+                    Delete All Customers
                 </button>
             </div>
 

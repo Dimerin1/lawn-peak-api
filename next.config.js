@@ -2,6 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
+  experimental: {
+    outputFileTracingRoot: process.cwd(),
+  },
   typescript: {
     // !! WARN !!
     // Dangerously allow production builds to successfully complete even if

@@ -1,6 +1,5 @@
 import * as React from "react"
-import { AddressInput } from "./components/AddressInput"
-import { CSSProperties } from 'react'
+import { addPropertyControls, ControlType } from "framer"
 
 // Service configuration
 const SERVICES = {
@@ -31,7 +30,7 @@ const serviceTypes = [
     { value: 'WEEKLY', label: 'Weekly mowing (Save 25%)' }
 ];
 
-const inputStyle: CSSProperties = {
+const inputStyle = {
     width: "100%",
     height: "60px",
     padding: "12px 16px",
@@ -47,32 +46,18 @@ const inputStyle: CSSProperties = {
     boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.2)",
 }
 
-const selectStyle: CSSProperties = {
-    marginTop: "8px",
+const selectStyle = {
+    ...inputStyle,
     cursor: "pointer",
-    appearance: "none" as const,
-    backgroundImage: "url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23131313%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')",
+    appearance: "none",
+    backgroundImage: `url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23999999%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")`,
     backgroundRepeat: "no-repeat",
-    backgroundPosition: "right 0.7rem top 50%",
-    backgroundSize: "0.65rem auto",
-    paddingRight: "2rem",
-    width: "100%",
-    padding: "8px 32px 8px 16px",
-    fontSize: "16px",
-    lineHeight: "1.5",
-    border: "1px solid #E5E7EB",
-    borderRadius: "6px",
-    color: "#111827",
-    backgroundColor: "#F9FAFB",
-    boxShadow: "0 1px 2px 0 rgba(0, 0, 0, 0.05)"
+    backgroundPosition: "right 16px top 50%",
+    backgroundSize: "12px auto",
+    paddingRight: "48px",
 }
 
-interface QuoteCalculatorProps {
-    onPriceChange?: (price: number) => void;
-    onServiceChange?: (service: string) => void;
-}
-
-export function QuoteCalculator({ onPriceChange, onServiceChange }: QuoteCalculatorProps) {
+function QuoteCalculator({ onPriceChange, onServiceChange }) {
     const [formData, setFormData] = React.useState({
         address: "",
         lotSize: "",
@@ -88,7 +73,7 @@ export function QuoteCalculator({ onPriceChange, onServiceChange }: QuoteCalcula
     const [isProcessingPayment, setIsProcessingPayment] = React.useState(false)
     const [paymentError, setPaymentError] = React.useState("")
 
-    const handleAddressSelect = async (address) => {
+    const handleAddressSelect = async (address: string) => {
         setIsLoading(true)
         try {
             setFormData(prev => ({
@@ -106,7 +91,7 @@ export function QuoteCalculator({ onPriceChange, onServiceChange }: QuoteCalcula
         }
     }
 
-    const calculatePrice = (lotSize, service) => {
+    const calculatePrice = (lotSize: string, service: string) => {
         if (!lotSize) {
             throw new Error("Invalid lot size")
         }
@@ -156,7 +141,7 @@ export function QuoteCalculator({ onPriceChange, onServiceChange }: QuoteCalcula
         }
     }
 
-    const getQuote = async (lotSize, service) => {
+    const getQuote = async (lotSize: string, service: string) => {
         try {
             setIsLoading(true)
             setError("")
@@ -183,8 +168,6 @@ export function QuoteCalculator({ onPriceChange, onServiceChange }: QuoteCalcula
                 service: service,
                 lotSize: lotSize
             }))
-
-            if (onPriceChange) onPriceChange(calculatedPrice)
             
         } catch (err) {
             console.error("Quote error:", err)
@@ -205,13 +188,21 @@ export function QuoteCalculator({ onPriceChange, onServiceChange }: QuoteCalcula
         setPaymentError("")
         
         try {
+            // Get the latest quote data from localStorage to ensure we have the correct price
+            const storedQuoteData = localStorage.getItem('quoteData')
+            const quoteData = storedQuoteData ? JSON.parse(storedQuoteData) : null
+            
+            if (!quoteData || !quoteData.price) {
+                throw new Error('Please select lot size and service to get a quote first')
+            }
+
             const response = await fetch('https://lawn-peak-api.onrender.com/create-setup-intent', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    price: formData.price,
+                    price: quoteData.price.toString(),
                     service_type: formData.service,
                     address: formData.address,
                     lot_size: formData.lotSize,
@@ -418,6 +409,99 @@ export function QuoteCalculator({ onPriceChange, onServiceChange }: QuoteCalcula
                     }
                 `}
             </style>
+        </div>
+    )
+}
+
+QuoteCalculator.defaultProps = {
+    onPriceChange: () => {},
+    onServiceChange: () => {}
+}
+
+addPropertyControls(QuoteCalculator, {
+    onPriceChange: {
+        type: ControlType.EventHandler
+    },
+    onServiceChange: {
+        type: ControlType.EventHandler
+    }
+})
+
+function AddressInput({ value, onChange, onSelect, style }) {
+    const [address, setAddress] = React.useState("")
+    const [addressError, setAddressError] = React.useState("")
+    const [isLoadingAddress, setIsLoadingAddress] = React.useState(false)
+    const inputRef = React.useRef(null)
+
+    React.useEffect(() => {
+        if (typeof window !== "undefined" && window.google && inputRef.current) {
+            const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
+                componentRestrictions: { country: "us" },
+                fields: ["formatted_address", "geometry"]
+            })
+
+            autocomplete.addListener("place_changed", async () => {
+                try {
+                    setIsLoadingAddress(true)
+                    setAddressError("")
+                    
+                    const place = autocomplete.getPlace()
+                    if (!place.formatted_address) {
+                        throw new Error("Invalid address selected")
+                    }
+
+                    setAddress(place.formatted_address)
+                    onSelect(place.formatted_address)
+                } catch (err) {
+                    setAddressError(err.message || "Error selecting address")
+                } finally {
+                    setIsLoadingAddress(false)
+                }
+            })
+        }
+    }, [])
+
+    return (
+        <div style={{ width: "100%" }}>
+            <div style={{ position: "relative" }}>
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    placeholder="Enter your address..."
+                    disabled={isLoadingAddress}
+                    style={{
+                        ...style.input,
+                        "::placeholder": {
+                            color: "#999999",
+                            opacity: 1
+                        }
+                    }}
+                />
+                {isLoadingAddress && (
+                    <div style={{
+                        position: "absolute",
+                        right: "12px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        color: "#718096",
+                        fontSize: "14px"
+                    }}>
+                        Loading...
+                    </div>
+                )}
+            </div>
+            {addressError && (
+                <div style={{ 
+                    color: "#e53e3e", 
+                    fontSize: "14px",
+                    marginTop: "4px",
+                    paddingLeft: "12px"
+                }}>
+                    {addressError}
+                </div>
+            )}
         </div>
     )
 }

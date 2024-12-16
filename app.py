@@ -155,22 +155,29 @@ def create_setup_intent():
             print("Error: Return URL is required")
             return jsonify({'error': 'Return URL is required'}), 400
 
+        # Determine payment type based on service type
+        service_type = data.get('service_type')
+        payment_type = 'one_time' if service_type == 'ONE_TIME' else 'recurring'
+        price = str(data.get('price', '0'))  # Ensure price is always a string
+
         # Create a Customer
         print("Creating Stripe customer with metadata:", {
-            'service_type': data.get('service_type'),
+            'service_type': service_type,
+            'payment_type': payment_type,
             'address': data.get('address'),
             'lot_size': data.get('lot_size'),
             'phone': data.get('phone'),
-            'price': str(data.get('price'))
+            'price': price
         })
         
         customer = stripe.Customer.create(
             metadata={
-                'service_type': data.get('service_type'),
+                'service_type': service_type,
+                'payment_type': payment_type,
                 'address': data.get('address'),
                 'lot_size': data.get('lot_size'),
                 'phone': data.get('phone'),
-                'price': str(data.get('price'))  # Store price for later charging
+                'price': price  # Store price for later charging
             }
         )
         print("Created Stripe customer:", customer.id)
@@ -182,11 +189,12 @@ def create_setup_intent():
             customer=customer.id,
             payment_method_types=['card'],
             metadata={
-                'service_type': data.get('service_type'),
+                'service_type': service_type,
+                'payment_type': payment_type,
                 'address': data.get('address'),
                 'lot_size': data.get('lot_size'),
                 'phone': data.get('phone'),
-                'price': str(data.get('price'))
+                'price': price
             },
             success_url=return_url + '?setup=success&customer_id={CUSTOMER_ID}',
             cancel_url=return_url + '?setup=canceled',
@@ -385,6 +393,29 @@ def create_test_customer():
             'stripe_key_present': bool(stripe.api_key)
         }), 500
 
+@app.route('/delete-all-customers', methods=['POST'])
+def delete_all_customers():
+    try:
+        # List all customers
+        customers = stripe.Customer.list(limit=100)
+        
+        # Delete each customer
+        deleted_count = 0
+        for customer in customers.data:
+            stripe.Customer.delete(customer.id)
+            deleted_count += 1
+            
+        return jsonify({
+            'success': True,
+            'message': f'Successfully deleted {deleted_count} customers'
+        })
+            
+    except stripe.error.StripeError as e:
+        return jsonify({'error': str(e.user_message)}), 400
+    except Exception as e:
+        print('Error deleting customers:', str(e))
+        return jsonify({'error': 'An unexpected error occurred'}), 500
+
 # Admin endpoints
 @app.route('/admin-login', methods=['POST'])
 def admin_login():
@@ -419,11 +450,28 @@ def list_customers():
             
             has_payment_method = len(payment_methods.data) > 0
             
+            # Ensure metadata values are strings and present
+            metadata = {
+                'service_type': customer.metadata.get('service_type', ''),
+                'payment_type': customer.metadata.get('payment_type', ''),
+                'address': customer.metadata.get('address', ''),
+                'lot_size': customer.metadata.get('lot_size', ''),
+                'phone': customer.metadata.get('phone', ''),
+                'price': str(customer.metadata.get('price', '0')),  # Ensure price is a string
+                'charged': customer.metadata.get('charged', 'false'),
+                'charge_date': customer.metadata.get('charge_date', '')
+            }
+            
+            # Print debug information
+            print(f"Customer {customer.id} metadata:", customer.metadata)
+            print(f"Formatted price:", metadata['price'])
+            
             customer_data = {
                 'id': customer.id,
-                'metadata': customer.metadata,
+                'metadata': metadata,
                 'created': customer.created,
-                'has_payment_method': has_payment_method
+                'has_payment_method': has_payment_method,
+                'charged': metadata['charged'].lower() == 'true'
             }
             formatted_customers.append(customer_data)
             

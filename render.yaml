@@ -23,8 +23,12 @@ services:
   - type: web
     name: lawn-peak-front
     env: node
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    buildCommand: |
+      npm install
+      npm run build
+      cp -r .next/static .next/standalone/.next/
+      cp -r public .next/standalone/
+    startCommand: node .next/standalone/server.js
     envVars:
       - key: NODE_ENV
         value: production
