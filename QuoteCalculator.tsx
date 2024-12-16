@@ -188,6 +188,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         setPaymentError("")
         
         try {
+            // First, get the setup intent from our backend
             const response = await fetch('https://lawn-peak-api.onrender.com/create-setup-intent', {
                 method: 'POST',
                 headers: {
@@ -208,16 +209,45 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 throw new Error(data.error)
             }
 
-            // Redirect to Stripe Checkout
-            window.location.href = data.url
+            // Load Stripe.js
+            const stripe = await loadStripe('your_publishable_key')
+            if (!stripe) throw new Error('Failed to load Stripe')
+
+            // Show the card collection form
+            const result = await stripe.confirmCardSetup(data.clientSecret, {
+                payment_method: {
+                    card: elements.getElement('card'),
+                    billing_details: {
+                        phone: formData.phone,
+                    },
+                },
+            })
+
+            if (result.error) {
+                throw new Error(result.error.message)
+            }
+
+            // Payment method successfully set up
+            alert(`Card successfully saved! You will be charged $${data.futurePrice} after the service is completed.`)
             
         } catch (err) {
-            console.error("Payment error:", err)
-            setPaymentError(err.message || "Failed to process payment. Please try again.")
+            console.error("Payment setup error:", err)
+            setPaymentError(err.message || "Failed to setup payment method. Please try again.")
         } finally {
             setIsProcessingPayment(false)
         }
     }
+
+    const PriceDisplay = () => (
+        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+            <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
+                Estimated Price: {priceDisplay}
+            </div>
+            <div style={{ color: '#666', fontSize: '14px', marginTop: '5px' }}>
+                You will only be charged after the service is completed
+            </div>
+        </div>
+    )
 
     return (
         <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -290,26 +320,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 </div>
             ) : formData.price && !isLoading && (
                 <>
-                    <div className="price-container">
-                        <div className="price-title">Estimated Price</div>
-                        <div className="price-amount">${formData.price}</div>
-                        {(formData.service === 'WEEKLY' || formData.service === 'BI_WEEKLY') && (
-                            <div className="savings-badge">
-                                Save {formData.service === 'WEEKLY' ? '25%' : '15%'}
-                            </div>
-                        )}
-                        <div style={{
-                            fontSize: "14px",
-                            color: "#4A5568",
-                            marginTop: "8px",
-                            textAlign: "center",
-                            backgroundColor: "rgba(74, 85, 104, 0.1)",
-                            padding: "8px",
-                            borderRadius: "8px"
-                        }}>
-                            You will only be charged ${formData.price} after the service is completed
-                        </div>
-                    </div>
+                    <PriceDisplay />
                     
                     {formData.address && formData.lotSize && formData.service && formData.phone ? (
                         <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "16px" }}>

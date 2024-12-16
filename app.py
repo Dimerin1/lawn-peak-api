@@ -676,45 +676,33 @@ def create_setup_intent():
 
     try:
         data = request.get_json()
-        price = data.get('price')
         service_type = data.get('service_type')
         address = data.get('address')
         lot_size = data.get('lot_size')
         phone = data.get('phone')
+        price = data.get('price')  # We'll store this but not charge it yet
 
-        # Create Stripe Checkout Session
-        checkout_session = stripe.checkout.Session.create(
+        # Create a SetupIntent for future payments
+        setup_intent = stripe.SetupIntent.create(
             payment_method_types=['card'],
-            line_items=[{
-                'price_data': {
-                    'currency': 'usd',
-                    'unit_amount': int(price * 100),  # Convert to cents
-                    'product_data': {
-                        'name': f'Lawn Mowing Service - {service_type}',
-                        'description': f'Address: {address}\nLot Size: {lot_size}'
-                    },
-                },
-                'quantity': 1,
-            }],
-            mode='payment',
-            success_url='https://fabulous-screenshot-716470.framer.app/success',
-            cancel_url='https://fabulous-screenshot-716470.framer.app/cancel',
             metadata={
                 'service_type': service_type,
                 'address': address,
                 'lot_size': lot_size,
-                'phone': phone
+                'phone': phone,
+                'future_price': price  # Store the price to charge later
             }
         )
         
         response = jsonify({
-            'url': checkout_session.url
+            'clientSecret': setup_intent.client_secret,
+            'futurePrice': price  # Send back to frontend to display
         })
         response.headers.add('Access-Control-Allow-Origin', 'https://fabulous-screenshot-716470.framer.app')
         return response
 
     except Exception as e:
-        print(f"Error creating checkout session: {str(e)}", file=sys.stderr)
+        print(f"Error creating setup intent: {str(e)}", file=sys.stderr)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/health', methods=['GET'])
