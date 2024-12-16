@@ -531,48 +531,50 @@ def charge_customer():
         print('Error charging customer:', str(e))
         return jsonify({'error': str(e)}), 400
 
+@app.route('/admin-login', methods=['POST'])
+def admin_login():
+    data = request.get_json()
+    if not data or 'password' not in data:
+        return jsonify({'error': 'Password is required'}), 400
+    
+    if data['password'] == ADMIN_PASSWORD:
+        return jsonify({'success': True})
+    else:
+        return jsonify({'error': 'Invalid password'}), 401
+
 @app.route('/list-customers', methods=['GET'])
 def list_customers():
     try:
-        customers = stripe.Customer.list(limit=100)
+        # Get all payments from MongoDB
+        payments = list(payments_collection.find())
         
-        # Check payment status for each customer
-        for customer in customers.data:
-            payment = payments_collection.find_one({'customer_id': customer.id})
-            if payment:
-                if not customer.get('metadata'):
-                    customer['metadata'] = {}
-                customer['metadata']['charged'] = 'true'
-                customer['metadata']['charge_date'] = str(int(payment['charge_date'].timestamp()))
-            else:
-                if not customer.get('metadata'):
-                    customer['metadata'] = {}
-                customer['metadata']['charged'] = 'false'
-            
-            payment_methods = stripe.PaymentMethod.list(
-                customer=customer.id,
-                type='card'
-            )
-            
-            if payment_methods.data:
-                customer['has_payment_method'] = True
-            else:
-                customer['has_payment_method'] = False
+        # Convert MongoDB _id to string
+        for payment in payments:
+            payment['_id'] = str(payment['_id'])
         
-        return jsonify({'customers': customers.data})
+        # Transform payments into customer format
+        customers = []
+        for payment in payments:
+            customer = {
+                'id': payment['_id'],
+                'created': payment.get('timestamp', 0),
+                'charged': payment.get('charged', False),
+                'metadata': {
+                    'service_type': payment.get('service_type', ''),
+                    'address': payment.get('address', ''),
+                    'lot_size': payment.get('lot_size', ''),
+                    'phone': payment.get('phone', ''),
+                    'agreed_price': str(payment.get('amount', 0)),
+                    'charged': str(payment.get('charged', False)).lower(),
+                    'charge_date': str(payment.get('charge_date', '')) if payment.get('charged') else None
+                }
+            }
+            customers.append(customer)
+        
+        return jsonify({'customers': customers})
     except Exception as e:
-        print('Error listing customers:', str(e))
-        return jsonify({'error': str(e)}), 400
-
-@app.route('/admin-login', methods=['POST'])
-def admin_login():
-    data = request.json
-    password = data.get('password')
-    
-    if password == ADMIN_PASSWORD:
-        return jsonify({'success': True})
-    else:
-        return jsonify({'success': False, 'error': 'Invalid password'}), 401
+        print(f"Error fetching customers: {str(e)}")
+        return jsonify({'error': 'Failed to fetch customers'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
