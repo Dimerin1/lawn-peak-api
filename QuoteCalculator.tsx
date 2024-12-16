@@ -1,5 +1,5 @@
 import * as React from "react"
-import { AddressInput } from "./AddressInput"
+import { AddressInput } from "./components/AddressInput"
 
 // Service configuration
 const SERVICES = {
