@@ -25,11 +25,18 @@ try:
     
     print("Connecting to MongoDB...", file=sys.stderr)
     
-    # Connect with minimal SSL settings
+    # Create an SSL context with TLS 1.2
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+    
+    # Connect with explicit TLS settings
     client = MongoClient(
         mongo_uri,
+        tls=True,
         tlsCAFile=certifi.where(),
-        serverSelectionTimeoutMS=5000
+        tlsAllowInvalidCertificates=False,
+        serverSelectionTimeoutMS=10000,
+        ssl_context=ssl_context
     )
     
     # Test the connection
