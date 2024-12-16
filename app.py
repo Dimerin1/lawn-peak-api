@@ -7,6 +7,7 @@ import stripe
 from dotenv import load_dotenv
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+import datetime
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -320,6 +321,39 @@ def charge_customer():
         )
         logger.info("Customer metadata updated")
         
+        # Get customer data from Google Sheets
+        service = get_sheets_service()
+        SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID', '19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA')
+        
+        result = service.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range='A:I'
+        ).execute()
+        values = result.get('values', [])
+        
+        # Find the customer's row
+        customer_row = None
+        for i, row in enumerate(values):
+            if len(row) > 2 and row[2] == customer.email:  # Email is in column C (index 2)
+                customer_row = i
+                break
+        
+        if customer_row is not None:
+            # Update the Charged Date column
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            update_range = f'I{customer_row + 1}'  # +1 because sheets are 1-indexed
+            
+            service.spreadsheets().values().update(
+                spreadsheetId=SPREADSHEET_ID,
+                range=update_range,
+                valueInputOption='USER_ENTERED',
+                body={'values': [[now]]}
+            ).execute()
+            
+            logger.info(f"Updated charge date for customer {customer.email}")
+        else:
+            logger.warning(f"Customer {customer.email} not found in sheet")
+        
         response = jsonify({
             'success': True,
             'payment_intent_id': payment_intent.id,
@@ -532,6 +566,25 @@ def format_sheet():
 
         current_row = len(non_empty_rows)
 
+        # First, remove all existing formatting
+        clear_format_request = {
+            "updateCells": {
+                "range": {
+                    "sheetId": 0,
+                    "startRowIndex": 0,
+                    "endRowIndex": current_row + 1,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": 8
+                },
+                "fields": "userEnteredFormat"
+            }
+        }
+
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=SPREADSHEET_ID,
+            body={"requests": [clear_format_request]}
+        ).execute()
+
         # Update headers
         headers = [
             'Timestamp',
@@ -541,17 +594,18 @@ def format_sheet():
             'Phone Number',
             'Address',
             'Lot Size',
-            'Price ($)'
+            'Price ($)',
+            'Charged Date'
         ]
         
         service.spreadsheets().values().update(
             spreadsheetId=SPREADSHEET_ID,
-            range='A1:H1',
+            range='A1:I1',
             valueInputOption='USER_ENTERED',
             body={'values': [headers]}
         ).execute()
 
-        # Apply formatting
+        # Apply new formatting
         requests = [
             # Format headers
             {
@@ -561,7 +615,7 @@ def format_sheet():
                         "startRowIndex": 0,
                         "endRowIndex": 1,
                         "startColumnIndex": 0,
-                        "endColumnIndex": 8
+                        "endColumnIndex": 9
                     },
                     "cell": {
                         "userEnteredFormat": {
@@ -592,7 +646,7 @@ def format_sheet():
                             "startRowIndex": 1,
                             "endRowIndex": current_row + 1,
                             "startColumnIndex": 0,
-                            "endColumnIndex": 8
+                            "endColumnIndex": 9
                         },
                         "rowProperties": {
                             "headerColor": {
@@ -622,7 +676,7 @@ def format_sheet():
                         "startRowIndex": 0,
                         "endRowIndex": current_row + 1,
                         "startColumnIndex": 0,
-                        "endColumnIndex": 8
+                        "endColumnIndex": 9
                     },
                     "top": {"style": "SOLID"},
                     "bottom": {"style": "SOLID"},
@@ -639,7 +693,7 @@ def format_sheet():
                         "sheetId": 0,
                         "dimension": "COLUMNS",
                         "startIndex": 0,
-                        "endIndex": 8
+                        "endIndex": 9
                     }
                 }
             },
@@ -684,7 +738,7 @@ def format_sheet():
                         "startRowIndex": 0,
                         "endRowIndex": current_row + 1,
                         "startColumnIndex": 0,
-                        "endColumnIndex": 8
+                        "endColumnIndex": 9
                     },
                     "cell": {
                         "userEnteredFormat": {
@@ -742,6 +796,7 @@ def append_to_sheet(data):
             data.get('address', ''),
             data.get('lot_size', ''),
             str(data.get('price', '')),
+            data.get('charge_date', '')
         ]
         
         logger.info(f"Prepared row data: {row}")
@@ -749,7 +804,7 @@ def append_to_sheet(data):
         # First, get the current number of rows
         result = service.spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
-            range='A:H'
+            range='A:I'
         ).execute()
         values = result.get('values', [])
         current_row = len(values) + 1
@@ -764,14 +819,15 @@ def append_to_sheet(data):
                 'Phone Number',
                 'Address',
                 'Lot Size',
-                'Price ($)'
+                'Price ($)',
+                'Charged Date'
             ]
             body = {
                 'values': [headers]
             }
             service.spreadsheets().values().append(
                 spreadsheetId=SPREADSHEET_ID,
-                range='A1:H1',
+                range='A1:I1',
                 valueInputOption='USER_ENTERED',
                 insertDataOption='INSERT_ROWS',
                 body=body
@@ -784,7 +840,7 @@ def append_to_sheet(data):
         }
         service.spreadsheets().values().append(
             spreadsheetId=SPREADSHEET_ID,
-            range='A:H',
+            range='A:I',
             valueInputOption='USER_ENTERED',
             insertDataOption='INSERT_ROWS',
             body=body
@@ -800,7 +856,7 @@ def append_to_sheet(data):
                         "startRowIndex": 0,
                         "endRowIndex": 1,
                         "startColumnIndex": 0,
-                        "endColumnIndex": 8
+                        "endColumnIndex": 9
                     },
                     "cell": {
                         "userEnteredFormat": {
@@ -831,7 +887,7 @@ def append_to_sheet(data):
                             "startRowIndex": 1,
                             "endRowIndex": current_row + 1,
                             "startColumnIndex": 0,
-                            "endColumnIndex": 8
+                            "endColumnIndex": 9
                         },
                         "rowProperties": {
                             "headerColor": {
@@ -861,7 +917,7 @@ def append_to_sheet(data):
                         "startRowIndex": 0,
                         "endRowIndex": current_row + 1,
                         "startColumnIndex": 0,
-                        "endColumnIndex": 8
+                        "endColumnIndex": 9
                     },
                     "top": {"style": "SOLID"},
                     "bottom": {"style": "SOLID"},
@@ -878,7 +934,7 @@ def append_to_sheet(data):
                         "sheetId": 0,
                         "dimension": "COLUMNS",
                         "startIndex": 0,
-                        "endIndex": 8
+                        "endIndex": 9
                     }
                 }
             },
