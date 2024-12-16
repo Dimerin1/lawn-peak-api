@@ -1,7 +1,13 @@
 from flask import Flask, request, jsonify, render_template, redirect
 from flask_cors import CORS
 import os
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # If dotenv is not available, we'll rely on OS environment variables
+    pass
+
 import stripe
 import requests
 import json
@@ -13,10 +19,12 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
 # Load environment variables
-load_dotenv()
+# load_dotenv()
 
 # Configure Stripe
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
+if not stripe.api_key:
+    raise ValueError("STRIPE_SECRET_KEY environment variable is not set")
 
 @app.route('/')
 def home():
