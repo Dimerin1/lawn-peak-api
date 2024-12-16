@@ -33,8 +33,8 @@ function AdminDashboard() {
     const [filterPaymentType, setFilterPaymentType] = React.useState<'all' | 'one_time' | 'recurring'>('all')
     const [refreshKey, setRefreshKey] = React.useState(0)
 
-    // Get the base API URL
-    const API_BASE_URL = 'http://localhost:8080'
+    // API configuration
+    const API_BASE_URL = 'https://lawn-peak-api.onrender.com'
 
     // Simple authentication
     const handleLogin = async (e: React.FormEvent) => {

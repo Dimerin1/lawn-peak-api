@@ -22,9 +22,9 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: process.env.NODE_ENV === 'production'
-          ? 'https://lawn-peak-api.onrender.com/:path*'
-          : 'http://localhost:8080/:path*'
+        destination: process.env.NODE_ENV === 'development'
+          ? 'http://localhost:8080/:path*'
+          : 'https://lawn-peak-api.onrender.com/:path*'
       }
     ]
   }
