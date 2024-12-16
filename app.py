@@ -513,8 +513,10 @@ def get_sheets_service():
 
 def append_to_sheet(data):
     try:
+        logger.info("Creating Google Sheets service...")
         service = get_sheets_service()
         SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID', '19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA')
+        logger.info(f"Using spreadsheet ID: {SPREADSHEET_ID}")
         
         # Format data for sheets
         row = [
@@ -528,10 +530,13 @@ def append_to_sheet(data):
             str(data.get('price', '')),
         ]
         
+        logger.info(f"Prepared row data: {row}")
+        
         body = {
             'values': [row]
         }
         
+        logger.info("Attempting to append row to sheet...")
         result = service.spreadsheets().values().append(
             spreadsheetId=SPREADSHEET_ID,
             range='A:H',
@@ -540,6 +545,7 @@ def append_to_sheet(data):
             body=body
         ).execute()
         
+        logger.info(f"Successfully appended row. Result: {result}")
         return True
     except Exception as e:
         logger.error(f"Error appending to sheet: {str(e)}")
@@ -548,16 +554,23 @@ def append_to_sheet(data):
 @app.route('/submit-quote', methods=['POST'])
 def submit_quote():
     try:
+        logger.info("Received quote submission request")
         data = request.json
+        logger.info(f"Quote data received: {data}")
+        
         required_fields = ['name', 'email', 'service_type', 'phone', 'address', 'lot_size', 'price']
         
         if not all(field in data for field in required_fields):
+            logger.error(f"Missing required fields. Received fields: {data.keys()}")
             return jsonify({'error': 'Missing required fields'}), 400
             
         # Store in Google Sheets
+        logger.info("Attempting to store in Google Sheets...")
         if append_to_sheet(data):
+            logger.info("Successfully stored in Google Sheets")
             return jsonify({'success': True, 'message': 'Quote submitted successfully'})
         else:
+            logger.error("Failed to store in Google Sheets")
             return jsonify({'error': 'Failed to store quote data'}), 500
             
     except Exception as e:

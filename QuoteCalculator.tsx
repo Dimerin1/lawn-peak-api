@@ -186,32 +186,37 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
     // API URL for Render backend
     const API_BASE_URL = 'https://lawn-peak-api.onrender.com'
 
-    const handleSubmit = async (e) => {
-        e.preventDefault()
+    const handlePayment = async () => {
         setIsProcessingPayment(true)
         setPaymentError("")
-        
+
         try {
-            // First submit the quote data to store in Google Sheets
-            const quoteData = {
-                name: "",
-                email: "",
-                service_type: formData.service,
-                phone: formData.phone,
-                address: formData.address,
-                lot_size: formData.lotSize,
-                price: formData.price
-            }
+            // Get the latest quote data from localStorage to ensure we have the correct price
+            const storedQuoteData = localStorage.getItem('quoteData')
+            const quoteData = storedQuoteData ? JSON.parse(storedQuoteData) : null
             
+            if (!quoteData || !quoteData.price) {
+                throw new Error('Please select lot size and service to get a quote first')
+            }
+
+            // First submit the quote data to store in Google Sheets
             await fetch(`${API_BASE_URL}/submit-quote`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(quoteData)
+                body: JSON.stringify({
+                    name: "",  // These can be empty as they're not required yet
+                    email: "",
+                    service_type: formData.service,
+                    phone: formData.phone,
+                    address: formData.address,
+                    lot_size: formData.lotSize,
+                    price: quoteData.price
+                })
             })
 
-            // Then proceed with payment
+            // Then proceed with payment setup
             const response = await fetch(`${API_BASE_URL}/create-setup-intent`, {
                 method: 'POST',
                 headers: {
@@ -220,7 +225,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 credentials: 'omit',  
                 mode: 'cors',
                 body: JSON.stringify({
-                    price: formData.price.toString(),
+                    price: quoteData.price.toString(),
                     service_type: formData.service,
                     address: formData.address,
                     lot_size: formData.lotSize,
@@ -251,7 +256,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
 
     return (
         <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "16px" }}>
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={(e) => e.preventDefault()}>
                 <AddressInput
                     value={formData.address}
                     onChange={(value) => setFormData(prev => ({ ...prev, address: value }))}
@@ -341,7 +346,8 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     {formData.address && formData.lotSize && formData.service && formData.phone ? (
                         <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "16px" }}>
                             <button
-                                type="submit"
+                                type="button"
+                                onClick={handlePayment}
                                 disabled={isProcessingPayment}
                                 style={{
                                     width: "100%",
