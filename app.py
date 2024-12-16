@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from pymongo import MongoClient
 from datetime import datetime
 import sys
+import certifi
 
 load_dotenv()
 
@@ -15,10 +16,15 @@ CORS(app)
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
 try:
-    # Connect to MongoDB Atlas
+    # Connect to MongoDB Atlas with SSL/TLS settings
     mongo_uri = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/lawn-peak')
     print("Connecting to MongoDB...", file=sys.stderr)
-    client = MongoClient(mongo_uri)
+    client = MongoClient(
+        mongo_uri,
+        tls=True,
+        tlsCAFile=certifi.where(),
+        serverSelectionTimeoutMS=5000
+    )
     
     # Test the connection
     client.admin.command('ping')
@@ -609,6 +615,37 @@ def list_customers():
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Failed to fetch customers: {str(e)}'}), 500
+
+@app.route('/add-test-payment', methods=['GET'])
+def add_test_payment():
+    try:
+        # Add a test payment
+        test_payment = {
+            'customer_id': 'test_customer_1',
+            'timestamp': int(datetime.now().timestamp()),
+            'charged': False,
+            'service_type': 'Lawn Mowing',
+            'address': '123 Test St, Test City',
+            'lot_size': 'Medium',
+            'phone': '555-0123',
+            'amount': 50.00
+        }
+        
+        # Insert or update the test payment
+        result = payments_collection.update_one(
+            {'customer_id': test_payment['customer_id']},
+            {'$set': test_payment},
+            upsert=True
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Test payment added successfully',
+            'payment': test_payment
+        })
+    except Exception as e:
+        print(f"Error adding test payment: {str(e)}", file=sys.stderr)
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
