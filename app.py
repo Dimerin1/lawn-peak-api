@@ -7,8 +7,6 @@ from pymongo import MongoClient
 from datetime import datetime
 import sys
 import certifi
-import ssl
-import urllib.parse
 
 load_dotenv()
 
@@ -25,26 +23,21 @@ try:
     
     print("Connecting to MongoDB...", file=sys.stderr)
     
-    # Create an SSL context with TLS 1.2
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
-    ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
-    
-    # Connect with explicit TLS settings
+    # Connect with modern PyMongo defaults
     client = MongoClient(
         mongo_uri,
-        tls=True,
         tlsCAFile=certifi.where(),
-        tlsAllowInvalidCertificates=False,
-        serverSelectionTimeoutMS=10000,
-        ssl_context=ssl_context
+        serverSelectionTimeoutMS=5000,
+        connectTimeoutMS=20000,
+        socketTimeoutMS=20000
     )
     
     # Test the connection
     client.admin.command('ping')
     print("Successfully connected to MongoDB!", file=sys.stderr)
     
-    # Get or create database
-    db = client['lawn-peak']
+    # Get database
+    db = client.get_database('lawn-peak')
     
     # Get or create collections
     if 'payments' not in db.list_collection_names():
