@@ -23,6 +23,10 @@ try:
 except ImportError:
     print("Google services not available. Some features might be limited.")
 
+print("=== Starting Application ===")
+print(f"FLASK_ENV: {os.getenv('FLASK_ENV')}")
+print(f"Stripe Key Last 4: {os.getenv('STRIPE_SECRET_KEY')[-4:] if os.getenv('STRIPE_SECRET_KEY') else 'Not Set'}")
+
 app = Flask(__name__)
 
 # Configure CORS with specific origins
@@ -52,6 +56,8 @@ def after_request(response):
 
 # Configure Stripe
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
+print(f"Stripe API Key Set: {bool(stripe.api_key)}")
+print(f"Stripe API Key Last 4: {stripe.api_key[-4:] if stripe.api_key else 'Not Set'}")
 if not stripe.api_key:
     raise ValueError("STRIPE_SECRET_KEY environment variable is not set")
 
