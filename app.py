@@ -438,6 +438,40 @@ def create_app():
                 'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
             }), 500
 
+    @api.route('/create-test-customer', methods=['GET'])
+    def create_test_customer():
+        """Create a test customer to verify Stripe integration"""
+        try:
+            customer = stripe.Customer.create(
+                email="test@example.com",
+                name="Test Customer",
+                metadata={
+                    'service_type': 'test',
+                    'address': '123 Test St',
+                    'lot_size': '1000',
+                    'test_customer': 'true'
+                }
+            )
+            
+            return jsonify({
+                'success': True,
+                'customer': {
+                    'id': customer.id,
+                    'email': customer.email,
+                    'name': customer.name,
+                    'created': customer.created,
+                    'metadata': customer.metadata
+                }
+            })
+        except Exception as e:
+            logger.error(f"Error creating test customer: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': str(e),
+                'stripe_key_present': bool(stripe.api_key),
+                'stripe_key_length': len(stripe.api_key) if stripe.api_key else 0
+            }), 500
+
     app.register_blueprint(api)
 
     return app
