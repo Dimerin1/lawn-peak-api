@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect
+from flask import Flask, request, jsonify, render_template, redirect, Blueprint
 from flask_cors import CORS
 import os
 import time
@@ -69,7 +69,10 @@ logger.info(f"Stripe API Key Set: {bool(stripe.api_key)}")
 if not stripe.api_key:
     raise ValueError("STRIPE_SECRET_KEY environment variable is not set")
 
-@app.route('/')
+# Create a blueprint for API routes
+api = Blueprint('api', __name__)
+
+@api.route('/')
 def home():
     """Base endpoint to verify the app is running"""
     return jsonify({
@@ -78,7 +81,7 @@ def home():
         'routes': [str(rule) for rule in app.url_map.iter_rules()]
     })
 
-@app.route('/debug')
+@api.route('/debug')
 def debug():
     """Debug endpoint to check configuration"""
     return jsonify({
@@ -93,7 +96,7 @@ def debug():
         'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
     })
 
-@app.route('/create-checkout-session', methods=['POST'])
+@api.route('/create-checkout-session', methods=['POST'])
 def create_checkout_session():
     try:
         data = request.json
@@ -150,7 +153,7 @@ def create_checkout_session():
         print('Error creating checkout session:', str(e))
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
-@app.route('/create-payment-intent', methods=['POST'])
+@api.route('/create-payment-intent', methods=['POST'])
 def create_payment_intent():
     try:
         data = request.json
@@ -182,7 +185,7 @@ def create_payment_intent():
         print('Error creating payment intent:', str(e))
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
-@app.route('/create-setup-intent', methods=['POST'])
+@api.route('/create-setup-intent', methods=['POST'])
 def create_setup_intent():
     try:
         data = request.json
@@ -249,7 +252,7 @@ def create_setup_intent():
         print('Error creating setup intent:', str(e))
         return jsonify({'error': str(e)}), 400
 
-@app.route('/list-customers')
+@api.route('/list-customers')
 def list_customers():
     """List all Stripe customers"""
     try:
@@ -274,7 +277,7 @@ def list_customers():
             'stripe_key_length': len(stripe.api_key) if stripe.api_key else 0
         }), 500
 
-@app.route('/charge-customer', methods=['POST'])
+@api.route('/charge-customer', methods=['POST'])
 def charge_customer():
     try:
         data = request.json
@@ -321,7 +324,7 @@ def charge_customer():
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
-@app.route('/webhook', methods=['POST'])
+@api.route('/webhook', methods=['POST'])
 def webhook():
     event = None
     payload = request.data
@@ -345,7 +348,7 @@ def webhook():
     
     return jsonify({'status': 'success'})
 
-@app.route('/api/lot-size', methods=['POST'])
+@api.route('/api/lot-size', methods=['POST'])
 def get_lot_size_endpoint():
     try:
         data = request.json
@@ -367,7 +370,7 @@ def get_lot_size_endpoint():
         print('Error getting lot size:', str(e))
         return jsonify({'error': str(e)}), 500
 
-@app.route('/test-stripe', methods=['GET'])
+@api.route('/test-stripe', methods=['GET'])
 def test_stripe():
     try:
         # Try to list customers to verify Stripe connection
@@ -388,7 +391,7 @@ def test_stripe():
         print('Error testing Stripe connection:', str(e))
         return jsonify({'error': str(e)}), 500
 
-@app.route('/test-stripe-account', methods=['GET'])
+@api.route('/test-stripe-account', methods=['GET'])
 def test_stripe_account():
     try:
         # Get Stripe account info
@@ -422,7 +425,7 @@ def test_stripe_account():
             'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
         }), 500
 
-@app.route('/env-test', methods=['GET'])
+@api.route('/env-test', methods=['GET'])
 def env_test():
     """Simple endpoint to check environment variables"""
     env_vars = {
@@ -435,6 +438,25 @@ def env_test():
         'PATH': os.getenv('PATH')
     }
     return jsonify(env_vars)
+
+# Register the blueprint with the app
+app.register_blueprint(api)
+
+# Error handlers
+@app.errorhandler(404)
+def not_found_error(error):
+    return jsonify({
+        'error': 'Not Found',
+        'message': 'The requested URL was not found on the server.',
+        'available_routes': [str(rule) for rule in app.url_map.iter_rules()]
+    }), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({
+        'error': 'Internal Server Error',
+        'message': str(error)
+    }), 500
 
 def get_lot_size(address):
     if not GOOGLE_SERVICES_AVAILABLE:
