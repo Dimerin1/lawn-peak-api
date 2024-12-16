@@ -40,13 +40,21 @@ function AdminDashboard() {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
         try {
+            setLoading(true)
+            setError(null)
             const response = await axios.post(`${API_BASE_URL}/admin-login`, { password })
             if (response.data.success) {
                 setIsAuthenticated(true)
+                localStorage.setItem('adminAuth', 'true')
+                fetchCustomers() // Fetch customers after successful login
             }
         } catch (err) {
             console.error('Login error:', err)
             setError(err instanceof Error ? err.message : 'Login failed')
+            setIsAuthenticated(false)
+            localStorage.removeItem('adminAuth')
+        } finally {
+            setLoading(false)
         }
     }
 
@@ -54,28 +62,48 @@ function AdminDashboard() {
     React.useEffect(() => {
         const isAuth = localStorage.getItem('adminAuth') === 'true'
         setIsAuthenticated(isAuth)
+        if (isAuth) {
+            fetchCustomers()
+        } else {
+            setLoading(false) // Stop loading if not authenticated
+        }
     }, [])
 
     // Fetch customers
     const fetchCustomers = async () => {
+        if (!isAuthenticated) {
+            setLoading(false)
+            return
+        }
+        
         try {
             setLoading(true)
             setError(null)
             
             const response = await axios.get(`${API_BASE_URL}/list-customers`)
-            setCustomers(response.data.customers || [])
-            setFilteredCustomers(response.data.customers || [])
+            if (response.data.customers) {
+                setCustomers(response.data.customers)
+                setFilteredCustomers(response.data.customers)
+            } else {
+                throw new Error('No customer data received')
+            }
         } catch (err) {
             console.error('Error fetching customers:', err)
             setError(err instanceof Error ? err.message : 'Failed to fetch customers')
+            if (axios.isAxiosError(err) && err.response?.status === 401) {
+                setIsAuthenticated(false)
+                localStorage.removeItem('adminAuth')
+            }
         } finally {
             setLoading(false)
         }
     }
 
     React.useEffect(() => {
-        fetchCustomers()
-    }, [refreshKey])
+        if (isAuthenticated) {
+            fetchCustomers()
+        }
+    }, [refreshKey, isAuthenticated])
 
     React.useEffect(() => {
         let result = [...customers]
