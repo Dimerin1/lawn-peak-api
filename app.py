@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect
+from flask import Flask, request, jsonify, render_template, redirect, make_response
 from flask_cors import CORS
 import os
 import time
@@ -24,16 +24,26 @@ else:
 app = Flask(__name__)
 logger.info("Flask app created")
 
-# Configure CORS
-CORS(app, resources={
-    r"/*": {
-        "origins": ["http://localhost:3000", "https://lawn-peak.vercel.app", "https://lawn-peak.framer.website"],
+# Configure CORS with more permissive settings
+CORS(app, 
+    resources={r"/*": {
+        "origins": "*",  # Allow all origins during development
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
-        "supports_credentials": True
-    }
-})
-logger.info("CORS configured")
+        "expose_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True,
+        "send_wildcard": False
+    }})
+
+# Add CORS preflight handler
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = make_response()
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "*")
+        response.headers.add("Access-Control-Allow-Methods", "*")
+        return response
 
 @app.route('/')
 def home():

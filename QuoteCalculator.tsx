@@ -202,9 +202,9 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
             const response = await fetch(`${API_BASE_URL}/create-setup-intent`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Origin': 'https://lawn-peak.framer.website'
+                    'Content-Type': 'application/json'
                 },
+                credentials: 'omit',  
                 mode: 'cors',
                 body: JSON.stringify({
                     price: quoteData.price.toString(),
