@@ -22,20 +22,17 @@ services:
 
   - type: web
     name: lawn-peak-front
-    env: python
-    buildCommand: |
-      npm install
-      npm run build
-      pip install -r requirements.txt
-    startCommand: gunicorn frontend:app
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.9.0
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        value: https://lawn-peak-api.onrender.com
+      - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+        sync: false
       - key: PORT
         value: 10000
-      - key: API_URL
-        value: https://lawn-peak-api.onrender.com
-      - key: STRIPE_PUBLISHABLE_KEY
-        sync: false
-      - key: GOOGLE_MAPS_API_KEY
-        sync: false
