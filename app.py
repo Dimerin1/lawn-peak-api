@@ -75,7 +75,23 @@ if not stripe.api_key:
 
 @app.route('/')
 def home():
-    return jsonify({"status": "API is running"})
+    """Base endpoint to verify the app is running"""
+    return jsonify({
+        'status': 'ok',
+        'message': 'Lawn Peak API is running',
+        'env': os.getenv('FLASK_ENV'),
+        'routes': [str(rule) for rule in app.url_map.iter_rules()]
+    })
+
+@app.route('/debug')
+def debug():
+    """Debug endpoint to check configuration"""
+    return jsonify({
+        'env_vars': {k: v for k, v in os.environ.items() if not k.startswith('_')},
+        'routes': [str(rule) for rule in app.url_map.iter_rules()],
+        'stripe_key_present': bool(stripe.api_key),
+        'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
+    })
 
 @app.route('/create-checkout-session', methods=['POST'])
 def create_checkout_session():
