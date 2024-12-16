@@ -286,21 +286,30 @@ def charge_customer():
             metadata=customer.metadata
         )
         
-        # Update customer metadata to mark as charged
-        customer.metadata['charged'] = True
-        customer.save()
+        # Update customer metadata to mark as charged and store charge date
+        current_time = time.strftime('%d.%m.%Y')
+        stripe.Customer.modify(
+            customer_id,
+            metadata={
+                **customer.metadata,
+                'charged': 'true',
+                'charge_date': current_time
+            }
+        )
         
         return jsonify({
             'success': True,
             'payment_intent_id': payment_intent.id,
             'amount': amount,
-            'status': payment_intent.status
+            'status': payment_intent.status,
+            'charge_date': current_time
         })
 
     except stripe.error.CardError as e:
         return jsonify({'error': 'Card was declined', 'details': str(e)}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        print('Error charging customer:', str(e))
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
