@@ -341,6 +341,61 @@ def get_lot_size_endpoint():
         print('Error getting lot size:', str(e))
         return jsonify({'error': str(e)}), 500
 
+@app.route('/test-stripe', methods=['GET'])
+def test_stripe():
+    try:
+        # Try to list customers to verify Stripe connection
+        customers = stripe.Customer.list(limit=100)
+        account = stripe.Account.retrieve()
+        
+        return jsonify({
+            'success': True,
+            'stripe_account': account.id,
+            'customer_count': len(customers.data),
+            'customers': [{
+                'id': c.id,
+                'created': c.created,
+                'metadata': c.metadata
+            } for c in customers.data]
+        })
+    except Exception as e:
+        print('Error testing Stripe connection:', str(e))
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/test-stripe-account', methods=['GET'])
+def test_stripe_account():
+    try:
+        # Get Stripe account info
+        account = stripe.Account.retrieve()
+        
+        # List all customers
+        customers = stripe.Customer.list(limit=100)
+        
+        # Get environment info
+        env_info = {
+            'STRIPE_KEY_LAST_4': stripe.api_key[-4:] if stripe.api_key else None,
+            'FLASK_ENV': os.getenv('FLASK_ENV'),
+            'SERVER_SOFTWARE': os.getenv('SERVER_SOFTWARE', 'unknown')
+        }
+        
+        return jsonify({
+            'success': True,
+            'account_id': account.id,
+            'customer_count': len(customers.data),
+            'customers': [{
+                'id': c.id,
+                'created': c.created,
+                'metadata': c.metadata
+            } for c in customers.data],
+            'environment': env_info
+        })
+    except Exception as e:
+        print('Error testing Stripe:', str(e))
+        return jsonify({
+            'error': str(e),
+            'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
+        }), 500
+
 def get_lot_size(address):
     if not GOOGLE_SERVICES_AVAILABLE:
         return None
