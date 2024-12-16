@@ -536,30 +536,6 @@ def format_sheet():
         service = get_sheets_service()
         SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID', '19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA')
 
-        # Get spreadsheet metadata to find existing bandings
-        spreadsheet = service.spreadsheets().get(
-            spreadsheetId=SPREADSHEET_ID,
-            fields='sheets.bandedRanges'
-        ).execute()
-
-        # Remove all existing bandings
-        if 'sheets' in spreadsheet and spreadsheet['sheets']:
-            sheet = spreadsheet['sheets'][0]
-            if 'bandedRanges' in sheet:
-                remove_banding_requests = []
-                for banded_range in sheet['bandedRanges']:
-                    remove_banding_requests.append({
-                        "removeBanding": {
-                            "bandedRangeId": banded_range.get('bandedRangeId')
-                        }
-                    })
-                
-                if remove_banding_requests:
-                    service.spreadsheets().batchUpdate(
-                        spreadsheetId=SPREADSHEET_ID,
-                        body={"requests": remove_banding_requests}
-                    ).execute()
-
         # First, get all values
         result = service.spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
@@ -590,25 +566,6 @@ def format_sheet():
 
         current_row = len(non_empty_rows)
 
-        # Clear all formatting
-        clear_format_request = {
-            "updateCells": {
-                "range": {
-                    "sheetId": 0,
-                    "startRowIndex": 0,
-                    "endRowIndex": current_row + 1,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": 9
-                },
-                "fields": "userEnteredFormat"
-            }
-        }
-
-        service.spreadsheets().batchUpdate(
-            spreadsheetId=SPREADSHEET_ID,
-            body={"requests": [clear_format_request]}
-        ).execute()
-
         # Update headers
         headers = [
             'Timestamp',
@@ -629,7 +586,7 @@ def format_sheet():
             body={'values': [headers]}
         ).execute()
 
-        # Apply new formatting
+        # Apply formatting
         requests = [
             # Format headers
             {
@@ -659,37 +616,6 @@ def format_sheet():
                         }
                     },
                     "fields": "userEnteredFormat(backgroundColor,textFormat)"
-                }
-            },
-            # Alternate row colors
-            {
-                "addBanding": {
-                    "bandedRange": {
-                        "range": {
-                            "sheetId": 0,
-                            "startRowIndex": 1,
-                            "endRowIndex": current_row + 1,
-                            "startColumnIndex": 0,
-                            "endColumnIndex": 9
-                        },
-                        "rowProperties": {
-                            "headerColor": {
-                                "red": 0.9,
-                                "green": 0.9,
-                                "blue": 0.9
-                            },
-                            "firstBandColor": {
-                                "red": 1.0,
-                                "green": 1.0,
-                                "blue": 1.0
-                            },
-                            "secondBandColor": {
-                                "red": 0.95,
-                                "green": 0.95,
-                                "blue": 0.95
-                            }
-                        }
-                    }
                 }
             },
             # Add borders
@@ -953,37 +879,6 @@ def append_to_sheet(data):
                         }
                     },
                     "fields": "userEnteredFormat(backgroundColor,textFormat)"
-                }
-            },
-            # Alternate row colors
-            {
-                "addBanding": {
-                    "bandedRange": {
-                        "range": {
-                            "sheetId": 0,
-                            "startRowIndex": 1,
-                            "endRowIndex": current_row + 1,
-                            "startColumnIndex": 0,
-                            "endColumnIndex": 9
-                        },
-                        "rowProperties": {
-                            "headerColor": {
-                                "red": 0.9,
-                                "green": 0.9,
-                                "blue": 0.9
-                            },
-                            "firstBandColor": {
-                                "red": 1.0,
-                                "green": 1.0,
-                                "blue": 1.0
-                            },
-                            "secondBandColor": {
-                                "red": 0.95,
-                                "green": 0.95,
-                                "blue": 0.95
-                            }
-                        }
-                    }
                 }
             },
             # Add borders
