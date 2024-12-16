@@ -288,13 +288,16 @@ def charge_customer():
         
         # Update customer metadata to mark as charged and store charge date
         current_time = time.strftime('%d.%m.%Y')
+        customer_metadata = dict(customer.metadata)  # Convert from StripeObject to dict
+        customer_metadata.update({
+            'charged': 'true',
+            'charge_date': current_time
+        })
+        
+        # Update customer with new metadata
         stripe.Customer.modify(
             customer_id,
-            metadata={
-                **customer.metadata,
-                'charged': 'true',
-                'charge_date': current_time
-            }
+            metadata=customer_metadata
         )
         
         return jsonify({

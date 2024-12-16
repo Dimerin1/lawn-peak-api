@@ -171,16 +171,19 @@ function AdminDashboard() {
                     customer.id === customerId
                         ? {
                             ...customer,
+                            charged: true,
                             metadata: {
                                 ...customer.metadata,
                                 charged: 'true',
-                                charge_date: new Date().toISOString() // Use current date if not provided by backend
+                                charge_date: response.data.charge_date // Use the date from backend response
                             }
                         }
                         : customer
                 )
             )
             setSuccess('Customer charged successfully')
+            // Refresh customers list to get updated data from backend
+            fetchCustomers()
         } catch (err) {
             console.error('Error charging customer:', err)
             setError(err instanceof Error ? err.message : 'Failed to charge customer')
@@ -216,62 +219,59 @@ function AdminDashboard() {
     }
 
     const renderCustomerCard = (customer: Customer) => {
-        if (!customer) return null
-
-        const metadata = customer.metadata || {}
-        const createdDate = new Date(customer.created * 1000).toLocaleDateString()
-        const displayPrice = formatPrice(metadata.price)
-
+        const isCharging = chargingCustomerId === customer.id
+        
         return (
             <div key={customer.id} style={{
-                border: "1px solid #ddd",
-                borderRadius: "8px",
-                padding: "16px",
-                marginBottom: "16px",
-                backgroundColor: "#fff",
-                boxShadow: "0 2px 4px rgba(0,0,0,0.05)"
+                border: '1px solid #E2E8F0',
+                borderRadius: '8px',
+                padding: '16px',
+                marginBottom: '16px',
+                backgroundColor: 'white'
             }}>
-                <div style={{ marginBottom: "8px" }}>
-                    <strong>Created:</strong> {createdDate}
+                <div style={{ marginBottom: '8px' }}>
+                    <strong>Created:</strong> {new Date(customer.created * 1000).toLocaleDateString()}
                 </div>
                 <div style={{ marginBottom: '8px' }}>
-                    <strong>Service:</strong> {customer.metadata.service_type || 'N/A'}
+                    <strong>Service:</strong> {customer.metadata.service_type}
                 </div>
                 <div style={{ marginBottom: '8px' }}>
-                    <strong>Payment Type:</strong> {customer.metadata.payment_type || 'N/A'}
+                    <strong>Payment Type:</strong> {customer.metadata.payment_type}
                 </div>
                 <div style={{ marginBottom: '8px' }}>
-                    <strong>Price:</strong> ${customer.metadata.price || '0'}
+                    <strong>Price:</strong> ${customer.metadata.price}
                 </div>
                 <div style={{ marginBottom: '8px' }}>
-                    <strong>Address:</strong> {customer.metadata.address || 'N/A'}
+                    <strong>Address:</strong> {customer.metadata.address}
                 </div>
                 <div style={{ marginBottom: '8px' }}>
-                    <strong>Phone:</strong> {customer.metadata.phone || 'N/A'}
+                    <strong>Phone:</strong> {customer.metadata.phone}
                 </div>
                 <div style={{ marginBottom: '8px' }}>
-                    <strong>Lot Size:</strong> {customer.metadata.lot_size || 'N/A'} sq ft
+                    <strong>Lot Size:</strong> {customer.metadata.lot_size}
                 </div>
                 {customer.metadata.charge_date && (
-                    <div style={{ marginBottom: '8px', color: 'green' }}>
-                        <strong>Last Charged:</strong> {new Date(customer.metadata.charge_date).toLocaleDateString()}
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Last Charged:</strong> {customer.metadata.charge_date}
                     </div>
                 )}
                 {customer.has_payment_method && (
                     <button
                         onClick={() => handleChargeCustomer(customer.id, parseFloat(customer.metadata.price))}
-                        disabled={chargingCustomerId === customer.id}
+                        disabled={isCharging || customer.metadata.charged === 'true'}
                         style={{
-                            padding: "8px 16px",
-                            borderRadius: "4px",
-                            backgroundColor: chargingCustomerId === customer.id ? "#ccc" : "#4CAF50",
-                            color: "white",
-                            border: "none",
-                            cursor: chargingCustomerId === customer.id ? "not-allowed" : "pointer",
-                            marginTop: "8px"
+                            padding: '8px 16px',
+                            backgroundColor: customer.metadata.charged === 'true' ? '#A0AEC0' : '#48BB78',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: customer.metadata.charged === 'true' ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
                         }}
                     >
-                        {chargingCustomerId === customer.id ? "Processing..." : "Charge Customer"}
+                        {isCharging ? 'Processing...' : customer.metadata.charged === 'true' ? 'Charged' : 'Charge Customer'}
                     </button>
                 )}
             </div>
