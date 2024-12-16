@@ -14,7 +14,7 @@ CORS(app)
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
 # Connect to MongoDB Atlas
-mongo_uri = os.getenv('MONGODB_URI', 'mongodb+srv://your-connection-string')
+mongo_uri = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/lawn-peak')
 client = MongoClient(mongo_uri)
 db = client['lawn-peak']
 payments_collection = db['payments']
