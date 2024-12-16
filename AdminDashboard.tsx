@@ -60,25 +60,6 @@ function AdminDashboard() {
         setIsAuthenticated(isAuth)
     }, [])
 
-    // Load charged customers from localStorage
-    const getChargedCustomers = () => {
-        const charged = localStorage.getItem('chargedCustomers')
-        return charged ? JSON.parse(charged) : {}
-    }
-
-    // Save charged customer to localStorage
-    const saveChargedCustomer = (customerId: string, chargeDate: number) => {
-        const charged = getChargedCustomers()
-        charged[customerId] = chargeDate
-        localStorage.setItem('chargedCustomers', JSON.stringify(charged))
-    }
-
-    // Check if customer is charged using localStorage
-    const isCustomerCharged = (customerId: string) => {
-        const charged = getChargedCustomers()
-        return !!charged[customerId]
-    }
-
     const fetchCustomers = async () => {
         try {
             setLoading(true)
@@ -127,11 +108,7 @@ function AdminDashboard() {
                 throw new Error('Payment failed')
             }
 
-            // Save to localStorage and update state
-            const chargeDate = Math.floor(Date.now() / 1000)
-            saveChargedCustomer(customerId, chargeDate)
-            
-            // Update customers state
+            // Update customers state with the new charge data
             setCustomers(prev => 
                 prev.map(customer => 
                     customer.id === customerId
@@ -141,7 +118,7 @@ function AdminDashboard() {
                             metadata: {
                                 ...customer.metadata,
                                 charged: 'true',
-                                charge_date: String(chargeDate)
+                                charge_date: data.charge_date.toString()
                             }
                         }
                         : customer
@@ -161,7 +138,6 @@ function AdminDashboard() {
         if (!customer) return null
 
         const isCharging = chargingCustomerId === customer.id
-        const isCharged = isCustomerCharged(customer.id)
         const chargeDate = customer.metadata.charge_date 
             ? new Date(parseInt(customer.metadata.charge_date) * 1000).toLocaleDateString()
             : null
@@ -172,7 +148,7 @@ function AdminDashboard() {
                 borderRadius: '8px',
                 padding: '16px',
                 margin: '8px 0',
-                backgroundColor: isCharged ? '#f8f8f8' : 'white'
+                backgroundColor: customer.charged ? '#f8f8f8' : 'white'
             }}>
                 <div style={{ marginBottom: '8px' }}>
                     <strong>Service Type:</strong> {customer.metadata.service_type}
@@ -189,25 +165,25 @@ function AdminDashboard() {
                 <div style={{ marginBottom: '8px' }}>
                     <strong>Price:</strong> ${customer.metadata.agreed_price}
                 </div>
-                {isCharged && chargeDate && (
+                {customer.charged && chargeDate && (
                     <div style={{ marginBottom: '8px', color: 'green' }}>
                         <strong>Payment Status:</strong> Paid on {chargeDate}
                     </div>
                 )}
                 <button
                     onClick={() => handleCharge(customer.id, parseFloat(customer.metadata.agreed_price))}
-                    disabled={isCharging || isCharged}
+                    disabled={isCharging || customer.charged}
                     style={{
                         padding: '8px 16px',
-                        backgroundColor: isCharged ? '#cccccc' : '#4CAF50',
+                        backgroundColor: customer.charged ? '#cccccc' : '#4CAF50',
                         color: 'white',
                         border: 'none',
                         borderRadius: '4px',
-                        cursor: isCharged ? 'not-allowed' : 'pointer',
+                        cursor: customer.charged ? 'not-allowed' : 'pointer',
                         opacity: isCharging ? 0.7 : 1
                     }}
                 >
-                    {isCharging ? 'Processing...' : isCharged ? 'Payment Collected' : 'Collect Payment'}
+                    {isCharging ? 'Processing...' : customer.charged ? 'Payment Collected' : 'Collect Payment'}
                 </button>
             </div>
         )
