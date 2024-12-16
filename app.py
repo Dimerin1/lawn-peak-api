@@ -20,7 +20,7 @@ db = client['lawn-peak']
 payments_collection = db['payments']
 
 # Admin authentication
-ADMIN_PASSWORD = "NewAdminPassword123!"
+ADMIN_PASSWORD = "Qwe123asd456!@"
 
 @app.route('/')
 def root():
