@@ -7,6 +7,8 @@ from pymongo import MongoClient
 from datetime import datetime
 import sys
 import certifi
+import ssl
+import dns.resolver
 
 load_dotenv()
 
@@ -23,13 +25,28 @@ try:
     
     print("Connecting to MongoDB...", file=sys.stderr)
     
-    # Connect with modern PyMongo defaults
+    # Create SSL context with TLS 1.2
+    ctx = ssl.create_default_context(cafile=certifi.where())
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.verify_mode = ssl.CERT_REQUIRED
+    
+    # Configure DNS resolver
+    dns.resolver.default_resolver = dns.resolver.Resolver(configure=False)
+    dns.resolver.default_resolver.nameservers = ['8.8.8.8']  # Use Google's DNS
+    
+    # Connect with explicit SSL context
     client = MongoClient(
         mongo_uri,
-        tlsCAFile=certifi.where(),
-        serverSelectionTimeoutMS=5000,
+        ssl_cert_reqs=ssl.CERT_REQUIRED,
+        ssl_ca_certs=certifi.where(),
+        ssl_match_hostname=True,
+        ssl_context=ctx,
+        connect=True,  # Force connection at startup
+        serverSelectionTimeoutMS=10000,
         connectTimeoutMS=20000,
-        socketTimeoutMS=20000
+        socketTimeoutMS=20000,
+        retryWrites=True,
+        w='majority'
     )
     
     # Test the connection
