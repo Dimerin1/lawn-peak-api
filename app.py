@@ -24,16 +24,18 @@ else:
 app = Flask(__name__)
 logger.info("Flask app created")
 
-# Configure CORS with more permissive settings
+# Configure CORS
 CORS(app, 
-    resources={r"/*": {
-        "origins": "*",  # Allow all origins during development
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"],
-        "expose_headers": ["Content-Type", "Authorization"],
-        "supports_credentials": True,
-        "send_wildcard": False
-    }})
+    resources={
+        r"/*": {
+            "origins": ["https://fabulous-screenshot-716549.framer.app"],
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type"],
+            "max_age": 3600
+        }
+    },
+    supports_credentials=False
+)
 
 # Add CORS preflight handler
 @app.before_request
@@ -164,6 +166,14 @@ def create_payment_intent():
 @app.route('/create-setup-intent', methods=['POST'])
 def create_setup_intent():
     try:
+        # Add CORS headers for preflight
+        if request.method == 'OPTIONS':
+            response = make_response()
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+            response.headers.add('Access-Control-Allow-Methods', 'POST')
+            return response
+
         data = request.json
         print("Received setup intent request with data:", data)
         return_url = data.get('return_url')
@@ -228,13 +238,21 @@ def create_setup_intent():
         print("Created Stripe checkout session:", session.id)
         print("Session URL:", session.url)
         
-        return jsonify({
+        response = jsonify({
             'setupIntentUrl': session.url
         })
+        
+        # Add CORS headers to the actual response
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        return response
 
     except Exception as e:
         print('Error creating setup intent:', str(e))
-        return jsonify({'error': str(e)}), 400
+        error_response = jsonify({'error': str(e)})
+        error_response.headers.add('Access-Control-Allow-Origin', '*')
+        error_response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        return error_response, 400
 
 @app.route('/charge-customer', methods=['POST'])
 def charge_customer():
