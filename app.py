@@ -5,6 +5,8 @@ import time
 import logging
 import stripe
 from dotenv import load_dotenv
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -493,7 +495,75 @@ def delete_all_customers():
         print('Error deleting customers:', str(e))
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
-# Admin endpoints
+# Google Sheets Integration
+def get_sheets_service():
+    credentials = service_account.Credentials.from_service_account_info({
+        "type": "service_account",
+        "project_id": "lawn-quote-calculator",
+        "private_key_id": os.getenv('GOOGLE_SHEETS_PRIVATE_KEY_ID'),
+        "private_key": os.getenv('GOOGLE_SHEETS_PRIVATE_KEY').replace('\\n', '\n'),
+        "client_email": os.getenv('GOOGLE_SHEETS_CLIENT_EMAIL'),
+        "client_id": os.getenv('GOOGLE_SHEETS_CLIENT_ID'),
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": os.getenv('GOOGLE_SHEETS_CLIENT_X509_CERT_URL')
+    })
+    return build('sheets', 'v4', credentials=credentials)
+
+def append_to_sheet(data):
+    try:
+        service = get_sheets_service()
+        SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID', '19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA')
+        
+        # Format data for sheets
+        row = [
+            time.strftime('%Y-%m-%d %H:%M:%S'),  # Date
+            data.get('name', ''),
+            data.get('email', ''),
+            data.get('service_type', ''),
+            data.get('phone', ''),
+            data.get('address', ''),
+            data.get('lot_size', ''),
+            str(data.get('price', '')),
+        ]
+        
+        body = {
+            'values': [row]
+        }
+        
+        result = service.spreadsheets().values().append(
+            spreadsheetId=SPREADSHEET_ID,
+            range='A:H',
+            valueInputOption='USER_ENTERED',
+            insertDataOption='INSERT_ROWS',
+            body=body
+        ).execute()
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error appending to sheet: {str(e)}")
+        return False
+
+@app.route('/submit-quote', methods=['POST'])
+def submit_quote():
+    try:
+        data = request.json
+        required_fields = ['name', 'email', 'service_type', 'phone', 'address', 'lot_size', 'price']
+        
+        if not all(field in data for field in required_fields):
+            return jsonify({'error': 'Missing required fields'}), 400
+            
+        # Store in Google Sheets
+        if append_to_sheet(data):
+            return jsonify({'success': True, 'message': 'Quote submitted successfully'})
+        else:
+            return jsonify({'error': 'Failed to store quote data'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error in submit_quote: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/admin-login', methods=['POST', 'OPTIONS'])
 def admin_login():
     # Handle preflight CORS request
