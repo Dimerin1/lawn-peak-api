@@ -27,11 +27,18 @@ try:
     print(f"MongoDB URI: {mongo_uri}", file=sys.stderr)
     
     print("Connecting to MongoDB...", file=sys.stderr)
+    
+    # Parse the URI to remove any SSL options
+    from pymongo import uri_parser
+    uri_dict = uri_parser.parse_uri(mongo_uri)
+    
+    # Create a clean connection without SSL
     client = pymongo.MongoClient(
-        mongo_uri,
-        serverSelectionTimeoutMS=5000,  # 5 second timeout
-        directConnection=True,  # Force direct connection
-        connect=True  # Ensure we connect immediately
+        host=mongo_uri,
+        serverSelectionTimeoutMS=5000,
+        directConnection=True,
+        connect=True,
+        ssl=False  # Explicitly disable SSL
     )
     
     # Test the connection
