@@ -28,13 +28,14 @@ logger.info("Flask app created")
 CORS(app, 
     resources={
         r"/*": {
-            "origins": ["https://fabulous-screenshot-716549.framer.app"],
+            "origins": ["http://localhost:3000", "http://localhost:3001", "https://fabulous-screenshot-716549.framer.app"],
             "methods": ["GET", "POST", "OPTIONS"],
             "allow_headers": ["Content-Type"],
-            "max_age": 3600
+            "expose_headers": ["Content-Type"],
+            "max_age": 3600,
+            "supports_credentials": False
         }
-    },
-    supports_credentials=False
+    }
 )
 
 # Add CORS preflight handler
@@ -43,8 +44,8 @@ def handle_preflight():
     if request.method == "OPTIONS":
         response = make_response()
         response.headers.add("Access-Control-Allow-Origin", "*")
-        response.headers.add("Access-Control-Allow-Headers", "*")
-        response.headers.add("Access-Control-Allow-Methods", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
+        response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
         return response
 
 @app.route('/')
@@ -452,21 +453,40 @@ def delete_all_customers():
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
 # Admin endpoints
-@app.route('/admin-login', methods=['POST'])
+@app.route('/admin-login', methods=['POST', 'OPTIONS'])
 def admin_login():
+    # Handle preflight CORS request
+    if request.method == "OPTIONS":
+        response = make_response()
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
+        response.headers.add("Access-Control-Allow-Methods", "POST")
+        return response
+
     try:
         data = request.json
         password = data.get('password')
         
         # Simple password check - you might want to make this more secure
         if password == os.getenv('ADMIN_PASSWORD', 'Qwe123asd456!@'):
-            return jsonify({'success': True})
+            response = jsonify({'success': True})
         else:
-            return jsonify({'error': 'Invalid password'}), 401
+            response = jsonify({'error': 'Invalid password'}), 401
             
     except Exception as e:
         print('Error in admin login:', str(e))
-        return jsonify({'error': 'An unexpected error occurred'}), 500
+        response = jsonify({'error': 'An unexpected error occurred'}), 500
+
+    # Add CORS headers to the response
+    if isinstance(response, tuple):
+        response_obj, status_code = response
+        response = make_response(response_obj, status_code)
+    else:
+        response = make_response(response)
+
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    response.headers.add("Access-Control-Allow-Headers", "Content-Type")
+    return response
 
 @app.route('/list-customers', methods=['GET'])
 def list_customers():
