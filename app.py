@@ -22,24 +22,11 @@ CORS(app)
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
 try:
-    # Get MongoDB URI - using Railway's internal connection
-    mongo_uri = "mongodb://mongo:YkeKKRagzqBMTVhwClvlMsHqJuzInRHT@mongodb.railway.internal:27017"
-    print(f"MongoDB URI: {mongo_uri}", file=sys.stderr)
+    # Using MongoDB Atlas
+    mongo_uri = "mongodb+srv://jakubsmalmail:fWo3w3U5KLtdeONq@lawnpeak.l6fbe.mongodb.net/lawn-peak?retryWrites=true&w=majority"
+    print("Connecting to MongoDB Atlas...", file=sys.stderr)
     
-    print("Connecting to MongoDB...", file=sys.stderr)
-    
-    # Parse the URI to remove any SSL options
-    from pymongo import uri_parser
-    uri_dict = uri_parser.parse_uri(mongo_uri)
-    
-    # Create a clean connection without SSL
-    client = pymongo.MongoClient(
-        host=mongo_uri,
-        serverSelectionTimeoutMS=5000,
-        directConnection=True,
-        connect=True,
-        ssl=False  # Explicitly disable SSL
-    )
+    client = pymongo.MongoClient(mongo_uri)
     
     # Test the connection
     print("Testing connection...", file=sys.stderr)
