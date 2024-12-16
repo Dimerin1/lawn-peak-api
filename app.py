@@ -22,11 +22,39 @@ CORS(app)
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
 try:
-    # Using MongoDB Atlas
-    mongo_uri = "mongodb+srv://jakubsmalmail:fWo3w3U5KLtdeONq@lawnpeak.l6fbe.mongodb.net/lawn-peak?retryWrites=true&w=majority"
-    print("Connecting to MongoDB Atlas...", file=sys.stderr)
+    # Try Railway's MongoDB URI first, fallback to Atlas if not available
+    mongo_uri = os.getenv('MONGODB_URI', "mongodb+srv://jakubsmalmail:fWo3w3U5KLtdeONq@lawnpeak.l6fbe.mongodb.net/lawn-peak?retryWrites=true&w=majority")
+    print("Connecting to MongoDB...", file=sys.stderr)
     
-    client = pymongo.MongoClient(mongo_uri)
+    # Parse the URI to ensure no SSL options
+    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+    
+    # Parse the URI
+    parsed = urlparse(mongo_uri)
+    
+    # Get the query parameters
+    params = parse_qs(parsed.query)
+    
+    # Remove any SSL-related parameters
+    ssl_params = ['ssl', 'ssl_cert_reqs', 'ssl_ca_certs', 'ssl_certfile']
+    for param in ssl_params:
+        if param in params:
+            del params[param]
+    
+    # Rebuild the URI without SSL parameters
+    clean_query = urlencode(params, doseq=True)
+    clean_uri = urlunparse((
+        parsed.scheme,
+        parsed.netloc,
+        parsed.path,
+        parsed.params,
+        clean_query,
+        parsed.fragment
+    ))
+    
+    print(f"Using clean MongoDB URI (credentials masked)...", file=sys.stderr)
+    
+    client = pymongo.MongoClient(clean_uri)
     
     # Test the connection
     print("Testing connection...", file=sys.stderr)
