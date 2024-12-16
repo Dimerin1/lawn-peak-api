@@ -24,13 +24,14 @@ stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 try:
     # Get MongoDB URI - using Railway's internal connection
     mongo_uri = "mongodb://mongo:YkeKKRagzqBMTVhwClvlMsHqJuzInRHT@mongodb.railway.internal:27017"
-    print(f"Using MongoDB URI: {mongo_uri}", file=sys.stderr)
+    print(f"MongoDB URI: {mongo_uri}", file=sys.stderr)
     
     print("Connecting to MongoDB...", file=sys.stderr)
     client = pymongo.MongoClient(
         mongo_uri,
         serverSelectionTimeoutMS=5000,  # 5 second timeout
-        directConnection=True  # Force direct connection
+        directConnection=True,  # Force direct connection
+        connect=True  # Ensure we connect immediately
     )
     
     # Test the connection
