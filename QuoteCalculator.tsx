@@ -188,7 +188,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         setPaymentError("")
         
         try {
-            const response = await fetch('https://lawn-peak-api.onrender.com/create-setup-intent', {
+            const response = await fetch('https://lawn-peak-production.up.railway.app/create-setup-intent', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
