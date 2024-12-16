@@ -183,10 +183,13 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         }
     };
 
+    // API URL for Render backend
+    const API_BASE_URL = 'https://lawn-peak-api.onrender.com'
+
     const handlePayment = async () => {
         setIsProcessingPayment(true)
         setPaymentError("")
-        
+
         try {
             // Get the latest quote data from localStorage to ensure we have the correct price
             const storedQuoteData = localStorage.getItem('quoteData')
@@ -196,11 +199,13 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 throw new Error('Please select lot size and service to get a quote first')
             }
 
-            const response = await fetch('https://lawn-peak-api.onrender.com/create-setup-intent', {
+            const response = await fetch(`${API_BASE_URL}/create-setup-intent`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Origin': 'https://lawn-peak.framer.website'
                 },
+                mode: 'cors',
                 body: JSON.stringify({
                     price: quoteData.price.toString(),
                     service_type: formData.service,

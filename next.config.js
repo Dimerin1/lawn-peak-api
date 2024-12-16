@@ -12,15 +12,19 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    NEXT_PUBLIC_API_URL: process.env.NODE_ENV === 'production' 
+      ? 'https://lawn-peak-api.onrender.com'
+      : 'http://localhost:8080',
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
     NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
   },
   async rewrites() {
     return [
       {
-        source: '/admin',
-        destination: '/admin'
+        source: '/api/:path*',
+        destination: process.env.NODE_ENV === 'production'
+          ? 'https://lawn-peak-api.onrender.com/:path*'
+          : 'http://localhost:8080/:path*'
       }
     ]
   }
