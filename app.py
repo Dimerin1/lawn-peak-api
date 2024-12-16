@@ -2,6 +2,12 @@ from flask import Flask, request, jsonify, render_template, redirect
 from flask_cors import CORS
 import os
 import time
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -13,19 +19,26 @@ import stripe
 import requests
 import json
 
-# Make Google imports optional
-GOOGLE_SERVICES_AVAILABLE = False
+# Try importing Google services
 try:
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
     from google.oauth2 import service_account
     GOOGLE_SERVICES_AVAILABLE = True
 except ImportError:
-    print("Google services not available. Some features might be limited.")
+    logger.warning("Google services not available. Some features might be limited.")
+    GOOGLE_SERVICES_AVAILABLE = False
 
-print("=== Starting Application ===")
-print(f"FLASK_ENV: {os.getenv('FLASK_ENV')}")
-print(f"Stripe Key Last 4: {os.getenv('STRIPE_SECRET_KEY')[-4:] if os.getenv('STRIPE_SECRET_KEY') else 'Not Set'}")
+logger.info("================== STARTING LAWN PEAK API ==================")
+logger.info(f"Environment: {os.getenv('FLASK_ENV', 'not set')}")
+logger.info(f"Server Software: {os.getenv('SERVER_SOFTWARE', 'not set')}")
+
+# Load and verify Stripe key
+stripe_key = os.getenv('STRIPE_SECRET_KEY')
+logger.info(f"Stripe Key Present: {bool(stripe_key)}")
+if stripe_key:
+    logger.info(f"Stripe Key Last 4: {stripe_key[-4:]}")
+    logger.info(f"Stripe Key Length: {len(stripe_key)}")
 
 app = Flask(__name__)
 
@@ -56,8 +69,7 @@ def after_request(response):
 
 # Configure Stripe
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
-print(f"Stripe API Key Set: {bool(stripe.api_key)}")
-print(f"Stripe API Key Last 4: {stripe.api_key[-4:] if stripe.api_key else 'Not Set'}")
+logger.info(f"Stripe API Key Set: {bool(stripe.api_key)}")
 if not stripe.api_key:
     raise ValueError("STRIPE_SECRET_KEY environment variable is not set")
 
