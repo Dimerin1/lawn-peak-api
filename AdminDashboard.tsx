@@ -34,7 +34,7 @@ function AdminDashboard() {
     const [refreshKey, setRefreshKey] = React.useState(0)
 
     // API configuration
-    const API_BASE_URL = 'http://localhost:8080'
+    const API_BASE_URL = 'https://lawn-peak-api.onrender.com'
 
     // Axios configuration with CORS headers
     const axiosConfig = {
