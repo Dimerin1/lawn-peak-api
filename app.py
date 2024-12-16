@@ -34,19 +34,15 @@ try:
     dns.resolver.default_resolver = dns.resolver.Resolver(configure=False)
     dns.resolver.default_resolver.nameservers = ['8.8.8.8']  # Use Google's DNS
     
-    # Connect with explicit SSL context
+    # Connect with minimal SSL settings
     client = MongoClient(
         mongo_uri,
-        ssl_cert_reqs=ssl.CERT_REQUIRED,
-        ssl_ca_certs=certifi.where(),
-        ssl_match_hostname=True,
-        ssl_context=ctx,
-        connect=True,  # Force connection at startup
+        tls=True,
+        tlsCAFile=certifi.where(),
+        connect=True,
         serverSelectionTimeoutMS=10000,
         connectTimeoutMS=20000,
-        socketTimeoutMS=20000,
-        retryWrites=True,
-        w='majority'
+        socketTimeoutMS=20000
     )
     
     # Test the connection
