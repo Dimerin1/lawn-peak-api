@@ -199,49 +199,29 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     address: formData.address,
                     lot_size: formData.lotSize,
                     phone: formData.phone,
+                    return_url: window.location.origin + '/dashboard'
                 })
             })
 
-            const data = await response.json()
-            
-            if (data.error) {
-                throw new Error(data.error)
+            if (!response.ok) {
+                const errorData = await response.json()
+                throw new Error(errorData.error || 'Failed to setup payment method')
             }
 
-            // Redirect to Stripe's hosted setup page
-            window.location.href = `https://checkout.stripe.com/setup/${data.clientSecret}`
+            const data = await response.json()
             
+            if (data.setupIntentUrl) {
+                window.location.href = data.setupIntentUrl
+            } else {
+                throw new Error('No setup URL received')
+            }
         } catch (err) {
-            console.error("Payment setup error:", err)
-            setPaymentError(err.message || "Failed to setup payment method. Please try again.")
+            console.error('Setup error:', err)
+            setPaymentError(err.message || 'Failed to setup payment method. Please try again.')
         } finally {
             setIsProcessingPayment(false)
         }
     }
-
-    const PriceDisplay = () => (
-        <div style={{ textAlign: 'center', marginBottom: '20px', padding: '20px', backgroundColor: '#f7fafc', borderRadius: '12px' }}>
-            <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px' }}>
-                Estimated Price: {priceDisplay}
-            </div>
-            <div style={{ color: '#4A5568', fontSize: '14px', padding: '10px', backgroundColor: 'rgba(74, 85, 104, 0.1)', borderRadius: '8px' }}>
-                You will only be charged after the service is completed
-            </div>
-            {(formData.service === 'WEEKLY' || formData.service === 'BI_WEEKLY') && (
-                <div style={{ 
-                    display: 'inline-block',
-                    backgroundColor: '#48BB78',
-                    color: 'white',
-                    padding: '4px 12px',
-                    borderRadius: '9999px',
-                    fontSize: '14px',
-                    marginTop: '10px'
-                }}>
-                    Save {formData.service === 'WEEKLY' ? '25%' : '15%'}
-                </div>
-            )}
-        </div>
-    )
 
     return (
         <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -314,7 +294,23 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 </div>
             ) : formData.price && !isLoading && (
                 <>
-                    <PriceDisplay />
+                    <div className="price-container">
+                        <div className="price-title">Service Price</div>
+                        <div className="price-amount">${formData.price}</div>
+                        {(formData.service === 'WEEKLY' || formData.service === 'BI_WEEKLY') && (
+                            <div className="savings-badge">
+                                Save {formData.service === 'WEEKLY' ? '25%' : '15%'}
+                            </div>
+                        )}
+                        <div style={{
+                            fontSize: "14px",
+                            color: "#666",
+                            marginTop: "8px",
+                            textAlign: "center"
+                        }}>
+                            You will only be charged after the service is completed
+                        </div>
+                    </div>
                     
                     {formData.address && formData.lotSize && formData.service && formData.phone ? (
                         <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -334,34 +330,16 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                                     opacity: isProcessingPayment ? 0.7 : 1,
                                 }}
                             >
-                                {isProcessingPayment ? "Processing..." : "Pre-authorize Payment Method"}
+                                {isProcessingPayment ? "Processing..." : "Add Payment Method"}
                             </button>
-                            
-                            {paymentError && (
-                                <div style={{
-                                    color: "#e53e3e",
-                                    padding: "12px",
-                                    borderRadius: "8px",
-                                    backgroundColor: "rgba(229, 62, 62, 0.1)",
-                                    marginTop: "8px",
-                                    fontSize: "14px"
-                                }}>
-                                    {paymentError}
-                                </div>
-                            )}
-                            {!paymentError && (
-                                <div style={{
-                                    color: "#4A5568",
-                                    padding: "12px",
-                                    borderRadius: "8px",
-                                    backgroundColor: "rgba(74, 85, 104, 0.1)",
-                                    marginTop: "8px",
-                                    fontSize: "14px",
-                                    textAlign: "center"
-                                }}>
-                                    By proceeding, you agree to save your payment method. You will only be charged ${formData.price} after the service is completed.
-                                </div>
-                            )}
+                            <div style={{
+                                fontSize: "14px",
+                                color: "#666",
+                                textAlign: "center",
+                                padding: "0 16px"
+                            }}>
+                                We'll securely save your card. You'll only be charged ${formData.price} after your lawn is mowed.
+                            </div>
                         </div>
                     ) : (
                         <div style={{
@@ -378,6 +356,51 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     )}
                 </>
             )}
+
+            <style>
+                {`
+                    @keyframes fadeIn {
+                        from { opacity: 0; transform: translateY(-10px); }
+                        to { opacity: 1; transform: translateY(0); }
+                    }
+                    
+                    .price-container {
+                        background-color: #f7fafc;
+                        padding: 24px;
+                        border-radius: 12px;
+                        text-align: center;
+                        animation: fadeIn 0.3s ease-out;
+                    }
+                    
+                    .price-title {
+                        color: #4a5568;
+                        font-size: 16px;
+                        margin-bottom: 8px;
+                    }
+                    
+                    .price-amount {
+                        color: #2d3748;
+                        font-size: 36px;
+                        font-weight: 700;
+                    }
+                    
+                    .savings-badge {
+                        display: inline-block;
+                        background-color: #48bb78;
+                        color: white;
+                        padding: 4px 12px;
+                        border-radius: 9999px;
+                        font-size: 14px;
+                        margin-top: 8px;
+                    }
+                    
+                    .price-description {
+                        color: #718096;
+                        font-size: 14px;
+                        margin-top: 8px;
+                    }
+                `}
+            </style>
         </div>
     )
 }
