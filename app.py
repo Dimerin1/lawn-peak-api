@@ -5,6 +5,7 @@ import os
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from datetime import datetime
+import sys
 
 load_dotenv()
 
@@ -13,11 +14,33 @@ CORS(app)
 
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
-# Connect to MongoDB Atlas
-mongo_uri = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/lawn-peak')
-client = MongoClient(mongo_uri)
-db = client['lawn-peak']
-payments_collection = db['payments']
+try:
+    # Connect to MongoDB Atlas
+    mongo_uri = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/lawn-peak')
+    print("Connecting to MongoDB...", file=sys.stderr)
+    client = MongoClient(mongo_uri)
+    
+    # Test the connection
+    client.admin.command('ping')
+    print("Successfully connected to MongoDB!", file=sys.stderr)
+    
+    # Get or create database
+    db = client['lawn-peak']
+    
+    # Get or create collections
+    if 'payments' not in db.list_collection_names():
+        print("Creating payments collection...", file=sys.stderr)
+        db.create_collection('payments')
+        print("Payments collection created!", file=sys.stderr)
+    
+    payments_collection = db['payments']
+    
+    # Create an index on customer_id if it doesn't exist
+    payments_collection.create_index('customer_id', unique=True)
+    
+except Exception as e:
+    print(f"MongoDB Connection Error: {str(e)}", file=sys.stderr)
+    raise e
 
 # Admin authentication
 ADMIN_PASSWORD = "Qwe123asd456!@"
