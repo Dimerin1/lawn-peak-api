@@ -9,6 +9,7 @@ import sys
 import certifi
 import ssl
 import dns.resolver
+import traceback
 
 load_dotenv()
 
@@ -23,29 +24,24 @@ try:
     if not mongo_uri:
         raise ValueError("MongoDB URI not found in environment variables")
     
+    print(f"MongoDB URI: {mongo_uri}", file=sys.stderr)
     print("Connecting to MongoDB...", file=sys.stderr)
-    
-    # Create SSL context with TLS 1.2
-    ctx = ssl.create_default_context(cafile=certifi.where())
-    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-    ctx.verify_mode = ssl.CERT_REQUIRED
     
     # Configure DNS resolver
     dns.resolver.default_resolver = dns.resolver.Resolver(configure=False)
     dns.resolver.default_resolver.nameservers = ['8.8.8.8']  # Use Google's DNS
     
-    # Connect with minimal SSL settings
+    # Connect with minimal settings
     client = MongoClient(
         mongo_uri,
-        tls=True,
-        tlsCAFile=certifi.where(),
-        connect=True,
-        serverSelectionTimeoutMS=10000,
-        connectTimeoutMS=20000,
-        socketTimeoutMS=20000
+        connectTimeoutMS=30000,
+        socketTimeoutMS=30000,
+        serverSelectionTimeoutMS=30000,
+        tlsCAFile=certifi.where()
     )
     
     # Test the connection
+    print("Testing connection...", file=sys.stderr)
     client.admin.command('ping')
     print("Successfully connected to MongoDB!", file=sys.stderr)
     
@@ -65,6 +61,10 @@ try:
     
 except Exception as e:
     print(f"MongoDB Connection Error: {str(e)}", file=sys.stderr)
+    print("Error Type:", type(e).__name__, file=sys.stderr)
+    print("Error Details:", str(e), file=sys.stderr)
+    print("Traceback:", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
     raise e
 
 # Admin authentication
@@ -576,7 +576,11 @@ def charge_customer():
     except stripe.error.CardError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
-        print('Error charging customer:', str(e))
+        print('Error charging customer:', str(e), file=sys.stderr)
+        print("Error Type:", type(e).__name__, file=sys.stderr)
+        print("Error Details:", str(e), file=sys.stderr)
+        print("Traceback:", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         return jsonify({'error': str(e)}), 400
 
 @app.route('/admin-login', methods=['POST'])
@@ -624,15 +628,21 @@ def list_customers():
                 }
                 customers.append(customer)
             except Exception as e:
-                print(f"Error processing payment {payment.get('_id')}: {str(e)}")
+                print(f"Error processing payment {payment.get('_id')}: {str(e)}", file=sys.stderr)
+                print("Error Type:", type(e).__name__, file=sys.stderr)
+                print("Error Details:", str(e), file=sys.stderr)
+                print("Traceback:", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
                 continue
         
         print(f"Processed {len(customers)} customers")
         return jsonify({'customers': customers})
     except Exception as e:
-        print(f"Error fetching customers: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error fetching customers: {str(e)}", file=sys.stderr)
+        print("Error Type:", type(e).__name__, file=sys.stderr)
+        print("Error Details:", str(e), file=sys.stderr)
+        print("Traceback:", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         return jsonify({'error': f'Failed to fetch customers: {str(e)}'}), 500
 
 @app.route('/add-test-payment', methods=['GET'])
@@ -664,6 +674,10 @@ def add_test_payment():
         })
     except Exception as e:
         print(f"Error adding test payment: {str(e)}", file=sys.stderr)
+        print("Error Type:", type(e).__name__, file=sys.stderr)
+        print("Error Details:", str(e), file=sys.stderr)
+        print("Traceback:", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
