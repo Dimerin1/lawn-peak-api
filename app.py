@@ -24,16 +24,29 @@ try:
     for key, value in os.environ.items():
         print(f"'{key}': '{value}'", file=sys.stderr)
     
+    # Try different possible MongoDB URI environment variables
+    possible_vars = [
+        'MONGODB_URI',
+        'MongoDB_MONGODB_URI',
+        'MONGO_URI',
+        'MongoDB_URI',
+        'MONGOHOST'
+    ]
+    
+    for var in possible_vars:
+        value = os.environ.get(var)
+        print(f"Checking {var}: {value}", file=sys.stderr)
+    
     # Get MongoDB URI from environment
-    mongo_uri = os.environ.get('MONGODB_URI')
+    mongo_uri = os.environ.get('MongoDB_MONGODB_URI') or os.environ.get('MONGODB_URI')
+    if not mongo_uri:
+        raise ValueError("MongoDB URI not found in environment variables")
+    
     print(f"Looking for MONGODB_URI, found: {mongo_uri}", file=sys.stderr)
     
     # Also try with different methods
     mongo_uri_getenv = os.getenv('MONGODB_URI')
     print(f"Using os.getenv: {mongo_uri_getenv}", file=sys.stderr)
-    
-    if not mongo_uri:
-        raise ValueError("MongoDB URI not found in environment variables")
     
     print(f"MongoDB URI: {mongo_uri}", file=sys.stderr)
     print("Connecting to MongoDB...", file=sys.stderr)
