@@ -8,46 +8,43 @@ from datetime import datetime
 import json
 import traceback
 
-# Debug: Print ALL environment variables at startup
-print("=== START OF ENVIRONMENT VARIABLES ===", file=sys.stderr)
-for key, value in sorted(os.environ.items()):
-    masked_value = '******' if any(secret in key.lower() for secret in ['key', 'password', 'token', 'secret', 'uri']) else value
-    print(f"{key}: {masked_value}", file=sys.stderr)
-print("=== END OF ENVIRONMENT VARIABLES ===", file=sys.stderr)
-
 app = Flask(__name__)
 CORS(app)
 
+# Initialize Stripe
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
+if not stripe.api_key:
+    print("Warning: STRIPE_SECRET_KEY not found in environment variables", file=sys.stderr)
 
 # Initialize SQLite database
 def init_db():
-    conn = sqlite3.connect('payments.db')
-    c = conn.cursor()
-    
-    # Create payments table if it doesn't exist
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS payments (
-            id TEXT PRIMARY KEY,
-            customer_id TEXT UNIQUE,
-            address TEXT,
-            service_type TEXT,
-            phone TEXT,
-            agreed_price REAL,
-            charged BOOLEAN DEFAULT FALSE,
-            created TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect('payments.db')
+        c = conn.cursor()
+        
+        # Create payments table if it doesn't exist
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS payments (
+                id TEXT PRIMARY KEY,
+                customer_id TEXT UNIQUE,
+                address TEXT,
+                service_type TEXT,
+                phone TEXT,
+                agreed_price REAL,
+                charged BOOLEAN DEFAULT FALSE,
+                created TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+        print("Database initialized successfully!", file=sys.stderr)
+    except Exception as e:
+        print("Database initialization error:", str(e), file=sys.stderr)
+        raise e
 
-try:
-    init_db()
-    print("Database initialized successfully!", file=sys.stderr)
-except Exception as e:
-    print("Database initialization error:", str(e), file=sys.stderr)
-    raise e
+# Initialize database on startup
+init_db()
 
 def dict_factory(cursor, row):
     d = {}
