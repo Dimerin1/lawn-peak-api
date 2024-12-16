@@ -18,9 +18,10 @@ COPY . .
 # Set environment variables
 ENV FLASK_APP=app.py
 ENV FLASK_ENV=production
+ENV PORT=8080
 
-# Expose the port
-EXPOSE 8000
+# Expose the port (Railway uses 8080)
+EXPOSE 8080
 
-# Run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"]
+# Run the application with Railway's port
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:$PORT app:app"]
