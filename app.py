@@ -435,6 +435,20 @@ def test_stripe_account():
             'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
         }), 500
 
+@app.route('/env-test', methods=['GET'])
+def env_test():
+    """Simple endpoint to check environment variables"""
+    env_vars = {
+        'FLASK_ENV': os.getenv('FLASK_ENV'),
+        'STRIPE_KEY_PRESENT': bool(os.getenv('STRIPE_SECRET_KEY')),
+        'STRIPE_KEY_LENGTH': len(os.getenv('STRIPE_SECRET_KEY', '')),
+        'STRIPE_KEY_LAST_4': os.getenv('STRIPE_SECRET_KEY', '')[-4:] if os.getenv('STRIPE_SECRET_KEY') else None,
+        'SERVER_SOFTWARE': os.getenv('SERVER_SOFTWARE'),
+        'PWD': os.getenv('PWD'),
+        'PATH': os.getenv('PATH')
+    }
+    return jsonify(env_vars)
+
 def get_lot_size(address):
     if not GOOGLE_SERVICES_AVAILABLE:
         return None
