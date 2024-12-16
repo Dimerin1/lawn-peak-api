@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, render_template, redirect
 from flask_cors import CORS
 import os
+import time
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -24,9 +25,6 @@ except ImportError:
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
-
-# Load environment variables
-# load_dotenv()
 
 # Configure Stripe
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
@@ -179,130 +177,6 @@ def create_setup_intent():
         print('Error creating setup intent:', str(e))
         return jsonify({'error': str(e)}), 400
 
-@app.route('/charge-customer', methods=['POST'])
-def charge_customer():
-    try:
-        data = request.json
-        customer_id = data.get('customer_id')
-        amount = data.get('amount')  # Amount in dollars
-        
-        if not all([customer_id, amount]):
-            return jsonify({'error': 'Customer ID and amount are required'}), 400
-
-        # Get customer's default payment method
-        customer = stripe.Customer.retrieve(customer_id)
-        payment_methods = stripe.PaymentMethod.list(
-            customer=customer_id,
-            type='card'
-        )
-        
-        if not payment_methods.data:
-            return jsonify({'error': 'No payment method found for customer'}), 400
-
-        # Create and confirm the payment intent
-        payment_intent = stripe.PaymentIntent.create(
-            amount=int(float(amount) * 100),  # Convert to cents
-            currency='usd',
-            customer=customer_id,
-            payment_method=payment_methods.data[0].id,
-            off_session=True,
-            confirm=True,
-            metadata=customer.metadata
-        )
-        
-        return jsonify({
-            'success': True,
-            'payment_intent_id': payment_intent.id,
-            'amount': amount,
-            'status': payment_intent.status
-        })
-
-    except stripe.error.CardError as e:
-        return jsonify({'error': 'Card was declined', 'details': str(e)}), 400
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
-
-@app.route('/capture-payment', methods=['POST'])
-def capture_payment():
-    try:
-        data = request.get_json()
-        customer_id = data.get('customer_id')
-        amount = data.get('amount')  # Amount in cents
-        
-        # Get the customer's default payment method
-        customer = stripe.Customer.retrieve(customer_id)
-        
-        # Create and confirm a PaymentIntent
-        payment_intent = stripe.PaymentIntent.create(
-            amount=amount,
-            currency='usd',
-            customer=customer_id,
-            confirm=True,
-            metadata={
-                'service_type': customer.metadata.get('service_type'),
-                'address': customer.metadata.get('address'),
-                'lot_size': customer.metadata.get('lot_size'),
-                'phone': customer.metadata.get('phone')
-            }
-        )
-        
-        return jsonify({
-            'success': True,
-            'payment_intent': payment_intent.id
-        })
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
-
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    event = None
-    payload = request.data
-    sig_header = request.headers.get('Stripe-Signature')
-    webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
-
-    try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, webhook_secret
-        )
-    except ValueError as e:
-        return jsonify({'error': 'Invalid payload'}), 400
-    except stripe.error.SignatureVerificationError as e:
-        return jsonify({'error': 'Invalid signature'}), 400
-
-    # Handle the event
-    if event['type'] == 'payment_intent.succeeded':
-        payment_intent = event['data']['object']
-        print('Payment succeeded:', payment_intent['id'])
-        # Here you can add logic to update your database, send confirmation emails, etc.
-    
-    return jsonify({'status': 'success'})
-
-@app.route('/api/lot-size', methods=['POST'])
-def get_lot_size_endpoint():
-    if not GOOGLE_SERVICES_AVAILABLE:
-        return jsonify({'error': 'Google services not available'}), 503
-        
-    try:
-        data = request.json
-        address = data.get('address')
-        
-        if not address:
-            return jsonify({'error': 'Address is required'}), 400
-            
-        lot_size = get_lot_size(address)
-        if not lot_size:
-            return jsonify({'error': 'Could not determine lot size'}), 400
-
-        return jsonify({
-            'lot_size': lot_size,
-            'address': address
-        })
-
-    except Exception as e:
-        print('Error getting lot size:', str(e))
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/list-customers', methods=['GET'])
 def list_customers():
     try:
@@ -336,44 +210,129 @@ def list_customers():
         print('Error fetching customers:', str(e))
         return jsonify({'error': str(e)}), 500
 
+@app.route('/charge-customer', methods=['POST'])
+def charge_customer():
+    try:
+        data = request.json
+        customer_id = data.get('customer_id')
+        amount = data.get('amount')  # Amount in dollars
+        
+        if not all([customer_id, amount]):
+            return jsonify({'error': 'Customer ID and amount are required'}), 400
+
+        # Get customer's default payment method
+        customer = stripe.Customer.retrieve(customer_id)
+        payment_methods = stripe.PaymentMethod.list(
+            customer=customer_id,
+            type='card'
+        )
+        
+        if not payment_methods.data:
+            return jsonify({'error': 'No payment method found for customer'}), 400
+
+        # Create and confirm the payment intent
+        payment_intent = stripe.PaymentIntent.create(
+            amount=int(float(amount) * 100),  # Convert to cents
+            currency='usd',
+            customer=customer_id,
+            payment_method=payment_methods.data[0].id,
+            off_session=True,
+            confirm=True,
+            metadata=customer.metadata
+        )
+        
+        # Update customer metadata to mark as charged
+        customer.metadata['charge_date'] = str(int(time.time()))
+        customer.save()
+        
+        return jsonify({
+            'success': True,
+            'payment_intent_id': payment_intent.id,
+            'amount': amount,
+            'status': payment_intent.status
+        })
+
+    except stripe.error.CardError as e:
+        return jsonify({'error': 'Card was declined', 'details': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    event = None
+    payload = request.data
+    sig_header = request.headers.get('Stripe-Signature')
+    webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, webhook_secret
+        )
+    except ValueError as e:
+        return jsonify({'error': 'Invalid payload'}), 400
+    except stripe.error.SignatureVerificationError as e:
+        return jsonify({'error': 'Invalid signature'}), 400
+
+    # Handle the event
+    if event['type'] == 'payment_intent.succeeded':
+        payment_intent = event['data']['object']
+        print('Payment succeeded:', payment_intent['id'])
+        # Here you can add logic to update your database, send confirmation emails, etc.
+    
+    return jsonify({'status': 'success'})
+
+@app.route('/api/lot-size', methods=['POST'])
+def get_lot_size_endpoint():
+    try:
+        data = request.json
+        address = data.get('address')
+        
+        if not address:
+            return jsonify({'error': 'Address is required'}), 400
+            
+        lot_size = get_lot_size(address)
+        if lot_size is None:
+            return jsonify({'error': 'Could not determine lot size'}), 400
+            
+        return jsonify({
+            'success': True,
+            'lot_size': lot_size
+        })
+        
+    except Exception as e:
+        print('Error getting lot size:', str(e))
+        return jsonify({'error': str(e)}), 500
+
 def get_lot_size(address):
     if not GOOGLE_SERVICES_AVAILABLE:
         return None
         
     try:
-        api_key = os.getenv('GOOGLE_MAPS_API_KEY')
-        if not api_key:
-            raise ValueError("Google Maps API key is not configured")
-
-        # Get place_id first
-        geocode_url = f"https://maps.googleapis.com/maps/api/geocode/json?address={address}&key={api_key}"
-        response = requests.get(geocode_url)
+        # Initialize the Maps API client
+        credentials = service_account.Credentials.from_service_account_file(
+            'google-credentials.json',
+            scopes=['https://www.googleapis.com/auth/places']
+        )
+        maps_client = build('places', 'v1', credentials=credentials)
         
-        if response.status_code != 200:
-            raise Exception("Failed to geocode address")
+        # Get place details
+        place_result = maps_client.places().findPlaceFromText(
+            input_=address,
+            inputtype='textquery',
+            fields=['place_id', 'geometry']
+        ).execute()
+        
+        if not place_result.get('candidates'):
+            return None
             
-        data = response.json()
+        place = place_result['candidates'][0]
+        location = place['geometry']['location']
         
-        if not data['results']:
-            raise Exception("No results found for address")
-            
-        place_id = data['results'][0]['place_id']
+        # Use the location to estimate lot size
+        # This is a simplified example - you'd need to implement actual lot size calculation
+        # based on property boundaries
+        return '5000'  # Return a default value for now
         
-        # Then get place details
-        details_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&fields=geometry&key={api_key}"
-        response = requests.get(details_url)
-        
-        if response.status_code != 200:
-            raise Exception("Failed to get place details")
-            
-        data = response.json()
-        
-        if 'result' not in data or 'geometry' not in data['result']:
-            raise Exception("No geometry data found")
-            
-        # For now, return a default lot size
-        return 5000  # Default to 5000 sq ft
-
     except Exception as e:
         print('Error in get_lot_size:', str(e))
         return None
