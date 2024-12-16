@@ -668,32 +668,53 @@ def add_test_payment():
 @app.route('/create-setup-intent', methods=['POST', 'OPTIONS'])
 def create_setup_intent():
     if request.method == 'OPTIONS':
-        # Handle CORS preflight request
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Origin', 'https://fabulous-screenshot-716470.framer.app')
-        response.headers.add('Access-Control-Allow-Headers', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         return response
 
     try:
-        # Create a SetupIntent
-        setup_intent = stripe.SetupIntent.create(
+        data = request.get_json()
+        price = data.get('price')
+        service_type = data.get('service_type')
+        address = data.get('address')
+        lot_size = data.get('lot_size')
+        phone = data.get('phone')
+
+        # Create Stripe Checkout Session
+        checkout_session = stripe.checkout.Session.create(
             payment_method_types=['card'],
-            usage='off_session'  # Important for future payments
+            line_items=[{
+                'price_data': {
+                    'currency': 'usd',
+                    'unit_amount': int(price * 100),  # Convert to cents
+                    'product_data': {
+                        'name': f'Lawn Mowing Service - {service_type}',
+                        'description': f'Address: {address}\nLot Size: {lot_size}'
+                    },
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url='https://fabulous-screenshot-716470.framer.app/success',
+            cancel_url='https://fabulous-screenshot-716470.framer.app/cancel',
+            metadata={
+                'service_type': service_type,
+                'address': address,
+                'lot_size': lot_size,
+                'phone': phone
+            }
         )
         
-        # Create the response
         response = jsonify({
-            'clientSecret': setup_intent.client_secret,
-            'setupIntentId': setup_intent.id
+            'url': checkout_session.url
         })
-        
-        # Add CORS headers to the response
         response.headers.add('Access-Control-Allow-Origin', 'https://fabulous-screenshot-716470.framer.app')
         return response
-        
+
     except Exception as e:
-        print(f"Error creating setup intent: {str(e)}", file=sys.stderr)
+        print(f"Error creating checkout session: {str(e)}", file=sys.stderr)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/health', methods=['GET'])

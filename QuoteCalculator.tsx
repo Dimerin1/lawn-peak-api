@@ -199,25 +199,21 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     address: formData.address,
                     lot_size: formData.lotSize,
                     phone: formData.phone,
-                    return_url: window.location.origin + '/dashboard'
                 })
             })
 
-            if (!response.ok) {
-                const errorData = await response.json()
-                throw new Error(errorData.error || 'Failed to setup payment method')
-            }
-
             const data = await response.json()
             
-            if (data.setupIntentUrl) {
-                window.location.href = data.setupIntentUrl
-            } else {
-                throw new Error('No setup URL received')
+            if (data.error) {
+                throw new Error(data.error)
             }
+
+            // Redirect to Stripe Checkout
+            window.location.href = data.url
+            
         } catch (err) {
-            console.error('Setup error:', err)
-            setPaymentError(err.message || 'Failed to setup payment method. Please try again.')
+            console.error("Payment error:", err)
+            setPaymentError(err.message || "Failed to process payment. Please try again.")
         } finally {
             setIsProcessingPayment(false)
         }
