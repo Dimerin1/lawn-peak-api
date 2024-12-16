@@ -11,9 +11,16 @@ except ImportError:
 import stripe
 import requests
 import json
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from google.oauth2 import service_account
+
+# Make Google imports optional
+GOOGLE_SERVICES_AVAILABLE = False
+try:
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+    from google.oauth2 import service_account
+    GOOGLE_SERVICES_AVAILABLE = True
+except ImportError:
+    print("Google services not available. Some features might be limited.")
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -273,15 +280,17 @@ def webhook():
 
 @app.route('/api/lot-size', methods=['POST'])
 def get_lot_size_endpoint():
+    if not GOOGLE_SERVICES_AVAILABLE:
+        return jsonify({'error': 'Google services not available'}), 503
+        
     try:
         data = request.json
         address = data.get('address')
         
         if not address:
             return jsonify({'error': 'Address is required'}), 400
-
+            
         lot_size = get_lot_size(address)
-        
         if not lot_size:
             return jsonify({'error': 'Could not determine lot size'}), 400
 
@@ -291,41 +300,50 @@ def get_lot_size_endpoint():
         })
 
     except Exception as e:
+        print('Error getting lot size:', str(e))
         return jsonify({'error': str(e)}), 500
 
 def get_lot_size(address):
-    api_key = os.getenv('GOOGLE_MAPS_API_KEY')
-    if not api_key:
-        raise ValueError("Google Maps API key is not configured")
+    if not GOOGLE_SERVICES_AVAILABLE:
+        return None
+        
+    try:
+        api_key = os.getenv('GOOGLE_MAPS_API_KEY')
+        if not api_key:
+            raise ValueError("Google Maps API key is not configured")
 
-    # Get place_id first
-    geocode_url = f"https://maps.googleapis.com/maps/api/geocode/json?address={address}&key={api_key}"
-    response = requests.get(geocode_url)
-    
-    if response.status_code != 200:
-        raise Exception("Failed to geocode address")
+        # Get place_id first
+        geocode_url = f"https://maps.googleapis.com/maps/api/geocode/json?address={address}&key={api_key}"
+        response = requests.get(geocode_url)
         
-    data = response.json()
-    
-    if not data['results']:
-        raise Exception("No results found for address")
+        if response.status_code != 200:
+            raise Exception("Failed to geocode address")
+            
+        data = response.json()
         
-    place_id = data['results'][0]['place_id']
-    
-    # Then get place details
-    details_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&fields=geometry&key={api_key}"
-    response = requests.get(details_url)
-    
-    if response.status_code != 200:
-        raise Exception("Failed to get place details")
+        if not data['results']:
+            raise Exception("No results found for address")
+            
+        place_id = data['results'][0]['place_id']
         
-    data = response.json()
-    
-    if 'result' not in data or 'geometry' not in data['result']:
-        raise Exception("No geometry data found")
+        # Then get place details
+        details_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&fields=geometry&key={api_key}"
+        response = requests.get(details_url)
         
-    # For now, return a default lot size
-    return 5000  # Default to 5000 sq ft
+        if response.status_code != 200:
+            raise Exception("Failed to get place details")
+            
+        data = response.json()
+        
+        if 'result' not in data or 'geometry' not in data['result']:
+            raise Exception("No geometry data found")
+            
+        # For now, return a default lot size
+        return 5000  # Default to 5000 sq ft
+
+    except Exception as e:
+        print('Error in get_lot_size:', str(e))
+        return None
 
 def calculate_price(lot_size_range, service_type='ONE_TIME'):
     # Base prices for different service types
