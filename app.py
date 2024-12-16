@@ -27,7 +27,7 @@ logger.info("Flask app created")
 # Configure CORS
 CORS(app, resources={
     r"/*": {
-        "origins": ["http://localhost:3000", "https://lawn-peak.vercel.app"],
+        "origins": ["http://localhost:3000", "https://lawn-peak.vercel.app", "https://lawn-peak.framer.website"],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True
