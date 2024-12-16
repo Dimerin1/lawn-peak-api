@@ -7,6 +7,7 @@ from pymongo import MongoClient
 from datetime import datetime
 import sys
 import certifi
+import urllib.parse
 
 load_dotenv()
 
@@ -16,14 +17,44 @@ CORS(app)
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
 try:
-    # Connect to MongoDB Atlas with SSL/TLS settings
-    mongo_uri = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/lawn-peak')
+    # Get MongoDB URI from environment
+    mongo_uri = os.getenv('MONGODB_URI')
+    if not mongo_uri:
+        raise ValueError("MongoDB URI not found in environment variables")
+    
     print("Connecting to MongoDB...", file=sys.stderr)
+    
+    # Parse the MongoDB URI to add additional parameters
+    parsed_uri = urllib.parse.urlparse(mongo_uri)
+    query_dict = dict(urllib.parse.parse_qsl(parsed_uri.query))
+    
+    # Add or update parameters
+    query_dict.update({
+        'retryWrites': 'true',
+        'w': 'majority',
+        'directConnection': 'true'
+    })
+    
+    # Reconstruct the URI with updated parameters
+    new_query = urllib.parse.urlencode(query_dict)
+    new_uri = urllib.parse.urlunparse((
+        parsed_uri.scheme,
+        parsed_uri.netloc,
+        parsed_uri.path,
+        parsed_uri.params,
+        new_query,
+        parsed_uri.fragment
+    ))
+    
+    # Connect with updated URI and SSL settings
     client = MongoClient(
-        mongo_uri,
+        new_uri,
         tls=True,
         tlsCAFile=certifi.where(),
-        serverSelectionTimeoutMS=5000
+        serverSelectionTimeoutMS=30000,  # Increased timeout
+        connectTimeoutMS=20000,
+        socketTimeoutMS=20000,
+        tlsAllowInvalidCertificates=True  # For testing only
     )
     
     # Test the connection
