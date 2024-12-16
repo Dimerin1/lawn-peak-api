@@ -670,16 +670,28 @@ def create_setup_intent():
     if request.method == 'OPTIONS':
         # Handle CORS preflight request
         response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'POST')
+        response.headers.add('Access-Control-Allow-Origin', 'https://fabulous-screenshot-716470.framer.app')
+        response.headers.add('Access-Control-Allow-Headers', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         return response
 
     try:
-        setup_intent = stripe.SetupIntent.create()
-        return jsonify({
-            'clientSecret': setup_intent.client_secret
+        # Create a SetupIntent
+        setup_intent = stripe.SetupIntent.create(
+            payment_method_types=['card'],
+            usage='off_session'  # Important for future payments
+        )
+        
+        # Create the response
+        response = jsonify({
+            'clientSecret': setup_intent.client_secret,
+            'setupIntentId': setup_intent.id
         })
+        
+        # Add CORS headers to the response
+        response.headers.add('Access-Control-Allow-Origin', 'https://fabulous-screenshot-716470.framer.app')
+        return response
+        
     except Exception as e:
         print(f"Error creating setup intent: {str(e)}", file=sys.stderr)
         return jsonify({'error': str(e)}), 500
