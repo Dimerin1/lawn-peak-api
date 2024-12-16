@@ -539,7 +539,7 @@ def format_sheet():
         # First, get all values
         result = service.spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
-            range='A:H'
+            range='A:I'
         ).execute()
         values = result.get('values', [])
 
@@ -552,7 +552,7 @@ def format_sheet():
         # Clear the entire sheet first
         service.spreadsheets().values().clear(
             spreadsheetId=SPREADSHEET_ID,
-            range='A:H',
+            range='A:I',
             body={}
         ).execute()
 
@@ -566,24 +566,34 @@ def format_sheet():
 
         current_row = len(non_empty_rows)
 
-        # First, remove all existing formatting
-        clear_format_request = {
-            "updateCells": {
-                "range": {
-                    "sheetId": 0,
-                    "startRowIndex": 0,
-                    "endRowIndex": current_row + 1,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": 8
-                },
-                "fields": "userEnteredFormat"
+        # First, remove all existing formatting and banding
+        clear_requests = [
+            {
+                "updateCells": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": 0,
+                        "endRowIndex": current_row + 1,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": 9
+                    },
+                    "fields": "userEnteredFormat"
+                }
+            },
+            {
+                "removeBanding": {
+                    "bandedRangeId": 0
+                }
             }
-        }
+        ]
 
-        service.spreadsheets().batchUpdate(
-            spreadsheetId=SPREADSHEET_ID,
-            body={"requests": [clear_format_request]}
-        ).execute()
+        try:
+            service.spreadsheets().batchUpdate(
+                spreadsheetId=SPREADSHEET_ID,
+                body={"requests": clear_requests}
+            ).execute()
+        except Exception as e:
+            logger.warning(f"Error clearing formatting (this is expected if no banding exists): {str(e)}")
 
         # Update headers
         headers = [
@@ -718,6 +728,47 @@ def format_sheet():
                     "fields": "userEnteredFormat.numberFormat"
                 }
             },
+            # Format date columns (Timestamp and Charged Date)
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": 1,
+                        "endRowIndex": current_row + 1,
+                        "startColumnIndex": 0,  # Timestamp column
+                        "endColumnIndex": 1
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "numberFormat": {
+                                "type": "DATE_TIME",
+                                "pattern": "yyyy-mm-dd hh:mm:ss"
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat.numberFormat"
+                }
+            },
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": 1,
+                        "endRowIndex": current_row + 1,
+                        "startColumnIndex": 8,  # Charged Date column
+                        "endColumnIndex": 9
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "numberFormat": {
+                                "type": "DATE_TIME",
+                                "pattern": "yyyy-mm-dd hh:mm:ss"
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat.numberFormat"
+                }
+            },
             # Freeze header row
             {
                 "updateSheetProperties": {
@@ -761,6 +812,18 @@ def format_sheet():
         return jsonify({'success': True, 'message': 'Sheet formatted successfully'})
     except Exception as e:
         logger.error(f"Error formatting sheet: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/append-to-sheet', methods=['POST'])
+def append_to_sheet_endpoint():
+    try:
+        data = request.json
+        if append_to_sheet(data):
+            return jsonify({'success': True, 'message': 'Data appended to sheet'})
+        else:
+            return jsonify({'error': 'Failed to append data to sheet'}), 500
+    except Exception as e:
+        logger.error(f"Error appending to sheet: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # Google Sheets Integration
