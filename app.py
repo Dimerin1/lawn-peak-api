@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import stripe
 import os
@@ -22,31 +22,55 @@ payments_collection = db['payments']
 # Admin authentication
 ADMIN_PASSWORD = "Qwe123asd456!@"
 
+# Serve static files
+@app.route('/static/<path:path>')
+def send_static(path):
+    return send_from_directory('static', path)
+
 @app.route('/')
 def root():
     return jsonify({'status': 'Lawn Peak Backend API is running'})
 
 @app.route('/admin')
 def admin():
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Lawn Peak Admin</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
-        <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
-        <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
-    </head>
-    <body>
-        <div id="root"></div>
-        <script type="text/babel">
-            """ + open('AdminDashboard.tsx', 'r').read() + """
-            ReactDOM.render(<AdminDashboard />, document.getElementById('root'));
-        </script>
-    </body>
-    </html>
-    """
+    try:
+        with open('static/admin.html', 'r') as f:
+            return f.read()
+    except FileNotFoundError:
+        # Create static directory if it doesn't exist
+        os.makedirs('static', exist_ok=True)
+        
+        # Create admin.html
+        admin_html = """<!DOCTYPE html>
+<html>
+<head>
+    <title>Lawn Peak Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script src="/static/AdminDashboard.js" type="text/babel"></script>
+    <script type="text/babel">
+        ReactDOM.render(<AdminDashboard />, document.getElementById('root'));
+    </script>
+</body>
+</html>"""
+        
+        # Save admin.html
+        with open('static/admin.html', 'w') as f:
+            f.write(admin_html)
+            
+        # Save AdminDashboard.tsx as AdminDashboard.js
+        with open('AdminDashboard.tsx', 'r') as src, open('static/AdminDashboard.js', 'w') as dst:
+            dst.write(src.read())
+            
+        return admin_html
 
 @app.route('/charge-customer', methods=['POST'])
 def charge_customer():
