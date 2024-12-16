@@ -46,17 +46,13 @@ app = Flask(__name__)
 CORS(app, resources={
     r"/*": {
         "origins": [
-            "https://lawn-peak-production.up.railway.app",
             "http://localhost:3000",
-            "http://localhost:5000",
-            "https://lawn-peak-git-main-dimerin1.vercel.app",
             "https://lawn-peak.vercel.app",
-            "https://lawn-peak.onrender.com",
+            "https://lawn-peak-production.up.railway.app",
             "https://lawn-peak-api.onrender.com"
         ],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"],
-        "supports_credentials": True
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
     }
 })
 
