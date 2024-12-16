@@ -279,7 +279,7 @@ function AdminDashboard() {
                         <span style={{ color: '#666', fontSize: '0.9em' }}></span>
                     </div>
                 )}
-                {customer.has_payment_method && (
+                {customer.has_payment_method ? (
                     <button
                         onClick={() => handleChargeCustomer(customer.id, parseFloat(customer.metadata.price))}
                         disabled={isCharging || (!isRecurring && customer.metadata.charged === 'true')}
@@ -297,6 +297,20 @@ function AdminDashboard() {
                     >
                         {isCharging ? 'Processing...' : 'Charge Customer'}
                     </button>
+                ) : (
+                    <div style={{
+                        padding: '8px 16px',
+                        backgroundColor: '#FEF2F2',
+                        color: '#DC2626',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                    }}>
+                        <span style={{ fontWeight: 'bold' }}>⚠️</span>
+                        Awaiting Payment Method
+                    </div>
                 )}
             </div>
         )
