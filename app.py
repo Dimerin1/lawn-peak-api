@@ -130,126 +130,61 @@ def admin_login():
         logger.error(f"Error in admin login: {str(e)}")
         return jsonify({'error': 'Server error'}), 500
 
-@app.route('/charge-customer', methods=['POST', 'OPTIONS'])
+@app.route('/charge-customer', methods=['POST'])
 def charge_customer():
-    # Handle preflight CORS request
-    if request.method == "OPTIONS":
-        response = make_response()
-        response.headers.add("Access-Control-Allow-Origin", "*")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
-        response.headers.add("Access-Control-Allow-Methods", "POST")
-        return response
-
     try:
-        logger.info("Received charge-customer request")
-        data = request.json
-        logger.info(f"Request data: {data}")
-        
+        data = request.get_json()
         customer_id = data.get('customer_id')
-        amount = data.get('amount')  # Amount in dollars
-        
-        if not all([customer_id, amount]):
-            logger.error("Missing required fields")
-            return jsonify({'error': 'Customer ID and amount are required'}), 400
+        amount = data.get('amount')  # Amount in cents
 
-        # Get customer's default payment method
-        logger.info(f"Retrieving customer {customer_id}")
-        customer = stripe.Customer.retrieve(customer_id)
-        logger.info(f"Retrieved customer: {customer.id}")
+        if not customer_id or not amount:
+            return jsonify({'error': 'Missing customer_id or amount'}), 400
+
+        # Get customer to retrieve metadata
+        customer = stripe.Customer.get(customer_id)
         
+        # Check if customer has a referral discount
+        referral_code = customer.metadata.get('referral_code')
+        final_amount = float(customer.metadata.get('final_amount', amount))
+        
+        # Create payment intent
+        intent = stripe.PaymentIntent.create(
+            amount=int(final_amount * 100),  # Convert to cents
+            currency='usd',
+            customer=customer_id,
+            payment_method_types=['card'],
+            metadata={
+                'referral_code': referral_code,
+                'original_amount': str(amount),
+                'final_amount': str(final_amount)
+            }
+        )
+
+        # Get payment methods for customer
         payment_methods = stripe.PaymentMethod.list(
             customer=customer_id,
             type='card'
         )
-        logger.info(f"Found {len(payment_methods.data)} payment methods")
-        
+
         if not payment_methods.data:
-            logger.error("No payment method found")
             return jsonify({'error': 'No payment method found for customer'}), 400
 
-        # Create and confirm the payment intent
-        logger.info(f"Creating payment intent for amount {amount}")
-        payment_intent = stripe.PaymentIntent.create(
-            amount=int(float(amount) * 100),  # Convert to cents
-            currency='usd',
-            customer=customer_id,
-            payment_method=payment_methods.data[0].id,
-            off_session=True,
-            confirm=True,
-            metadata=customer.metadata
-        )
-        logger.info(f"Payment intent created: {payment_intent.id}")
-        
-        # Update customer metadata to store charge date
-        current_time = time.strftime('%d.%m.%Y %H:%M')  # Added time in 24-hour format
-        customer_metadata = dict(customer.metadata)  # Convert from StripeObject to dict
-        customer_metadata['charge_date'] = current_time
-        
-        # Update customer with new metadata
-        logger.info("Updating customer metadata")
-        stripe.Customer.modify(
-            customer_id,
-            metadata=customer_metadata
-        )
-        logger.info("Customer metadata updated")
-        
-        # Get customer data from Google Sheets
-        service = get_sheets_service()
-        SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID', '19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA')
-        
-        result = service.spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range='A:I'
-        ).execute()
-        values = result.get('values', [])
-        
-        # Find the customer's row
-        customer_row = None
-        for i, row in enumerate(values):
-            if len(row) > 2 and row[2] == customer.email:  # Email is in column C (index 2)
-                customer_row = i
-                break
-        
-        if customer_row is not None:
-            # Update the Charged Date column
-            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            update_range = f'I{customer_row + 1}'  # +1 because sheets are 1-indexed
-            
-            service.spreadsheets().values().update(
-                spreadsheetId=SPREADSHEET_ID,
-                range=update_range,
-                valueInputOption='USER_ENTERED',
-                body={'values': [[now]]}
-            ).execute()
-            
-            logger.info(f"Updated charge date for customer {customer.email}")
-        else:
-            logger.warning(f"Customer {customer.email} not found in sheet")
-        
-        response = jsonify({
-            'success': True,
-            'payment_intent_id': payment_intent.id,
-            'amount': amount,
-            'status': payment_intent.status,
-            'charge_date': current_time
-        })
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        logger.info("Charge completed successfully")
-        return response
+        # Confirm payment using first payment method
+        intent.confirm(payment_method=payment_methods.data[0].id)
 
-    except stripe.error.CardError as e:
-        logger.error(f"Card error: {str(e)}")
-        error_response = jsonify({'error': 'Card was declined', 'details': str(e)})
-        error_response.headers.add('Access-Control-Allow-Origin', '*')
-        error_response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        return error_response, 400
+        return jsonify({
+            'success': True,
+            'payment_intent': intent.id,
+            'amount_charged': final_amount,
+            'original_amount': amount,
+            'discount_applied': amount - final_amount if referral_code else 0
+        })
+
+    except stripe.error.StripeError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
-        logger.error(f"Error charging customer: {str(e)}")
-        error_response = jsonify({'error': 'An unexpected error occurred', 'details': str(e)})
-        error_response.headers.add('Access-Control-Allow-Origin', '*')
-        error_response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        return error_response, 500
+        logger.error(f'Error charging customer: {str(e)}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 @app.route('/')
 def home():
@@ -434,14 +369,40 @@ def create_setup_intent():
 
         logger.info(f"Creating setup intent with data: {data}")
         
+        # Validate referral code if provided
+        referral_data = None
+        referral_code = data.get('referral_code')
+        customer_email = data.get('email')
+        
+        if referral_code and customer_email:
+            referral_validation = validate_referral_code(referral_code, customer_email)
+            if not referral_validation['valid']:
+                return jsonify({'error': referral_validation['message']}), 400
+            referral_data = referral_validation
+
+        # Calculate price with referral discount
+        lot_size = data.get('lot_size')
+        service_type = data.get('service_type')
+        base_price = calculate_price(lot_size, service_type)
+        final_amount = base_price
+        
+        if referral_data and referral_data.get('valid'):
+            discount_amount = base_price * 0.15  # 15% discount
+            final_amount = base_price - discount_amount
+        
         # Create a new customer
         customer = stripe.Customer.create(
             description="Customer for LawnPeak service",
+            email=customer_email,
             metadata={
-                'service_type': data.get('service_type'),
+                'service_type': service_type,
                 'address': data.get('address'),
-                'lot_size': data.get('lot_size'),
-                'phone': data.get('phone')
+                'lot_size': lot_size,
+                'phone': data.get('phone'),
+                'referral_code': referral_code,
+                'base_price': str(base_price),
+                'final_amount': str(final_amount),
+                'referral_discount': str(discount_amount) if referral_data and referral_data.get('valid') else '0'
             }
         )
         logger.info(f"Created customer: {customer.id}")
@@ -454,17 +415,32 @@ def create_setup_intent():
             success_url=data.get('success_url', request.host_url),
             cancel_url=data.get('cancel_url', request.host_url),
             metadata={
-                'service_type': data.get('service_type'),
+                'service_type': service_type,
                 'address': data.get('address'),
-                'lot_size': data.get('lot_size'),
-                'phone': data.get('phone')
+                'lot_size': lot_size,
+                'phone': data.get('phone'),
+                'referral_code': referral_code,
+                'base_price': str(base_price),
+                'final_amount': str(final_amount),
+                'referral_discount': str(discount_amount) if referral_data and referral_data.get('valid') else '0'
             }
         )
         logger.info(f"Created session: {session.id}")
 
+        # Record referral use if valid
+        if referral_data and referral_data.get('valid'):
+            record_referral_use(
+                referral_code,
+                customer_email,
+                session.id,
+                20.0  # $20 reward for referrer
+            )
+
         return jsonify({
             'setupIntentUrl': session.url,
-            'sessionId': session.id
+            'sessionId': session.id,
+            'finalAmount': final_amount,
+            'discount': discount_amount if referral_data and referral_data.get('valid') else 0
         })
 
     except stripe.error.StripeError as e:

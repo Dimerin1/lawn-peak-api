@@ -9,7 +9,10 @@ interface Customer {
         address: string
         lot_size: string
         phone: string
-        price: string
+        base_price: string
+        final_amount: string
+        referral_code?: string
+        referral_discount?: string
         charged: string
         charge_date: string
     }
@@ -140,8 +143,8 @@ function AdminDashboard() {
                         : b.created - a.created
                 case 'price':
                     return sortOrder === 'asc'
-                        ? parseFloat(a.metadata.price) - parseFloat(b.metadata.price)
-                        : parseFloat(b.metadata.price) - parseFloat(a.metadata.price)
+                        ? parseFloat(a.metadata.base_price) - parseFloat(b.metadata.base_price)
+                        : parseFloat(b.metadata.base_price) - parseFloat(a.metadata.base_price)
                 case 'status':
                     return sortOrder === 'asc'
                         ? (a.charged === b.charged ? 0 : a.charged ? 1 : -1)
@@ -155,58 +158,32 @@ function AdminDashboard() {
     }, [customers, searchTerm, sortBy, sortOrder, filterPaymentType])
 
     // Handle charging customer
-    const handleChargeCustomer = async (customerId: string, amount: number) => {
-        if (!customerId || amount <= 0) {
-            setError('Invalid customer ID or amount')
-            return
-        }
-        
-        setChargingCustomerId(customerId)
-        setError(null)
+    const handleChargeCustomer = async (customerId: string) => {
         try {
-            console.log('Charging customer:', customerId, 'amount:', amount)
-            const response = await axios.post(`${API_BASE_URL}/charge-customer`, { 
-                customer_id: customerId,
-                amount: amount
-            }, axiosConfig)
+            setChargingCustomerId(customerId)
+            setError(null)
+            setSuccess(null)
 
-            console.log('Charge response:', response.data)
-
-            if (!response.data.success) {
-                throw new Error(response.data.error || 'Payment failed')
+            const customer = customers.find(c => c.id === customerId)
+            if (!customer) {
+                throw new Error('Customer not found')
             }
 
-            // Update the customer's charged status in the local state
-            setCustomers(prevCustomers => 
-                prevCustomers.map(customer => 
-                    customer.id === customerId
-                        ? {
-                            ...customer,
-                            metadata: {
-                                ...customer.metadata,
-                                charge_date: response.data.charge_date
-                            }
-                        }
-                        : customer
-                )
+            const response = await axios.post(
+                `${API_BASE_URL}/charge-customer`,
+                {
+                    customer_id: customerId,
+                    amount: parseFloat(customer.metadata.final_amount || customer.metadata.base_price)
+                },
+                axiosConfig
             )
-            setSuccess('Customer charged successfully')
-            // Refresh customers list to get updated data from backend
-            fetchCustomers()
-        } catch (err) {
-            console.error('Error charging customer:', err)
-            let errorMessage = 'Failed to charge customer'
-            if (axios.isAxiosError(err)) {
-                console.error('Axios error details:', {
-                    message: err.message,
-                    response: err.response?.data,
-                    status: err.response?.status
-                })
-                errorMessage = err.response?.data?.error || err.message
-            } else if (err instanceof Error) {
-                errorMessage = err.message
+
+            if (response.data.success) {
+                setSuccess(`Successfully charged customer ${customerId}. Amount: $${response.data.amount_charged}${response.data.discount_applied ? ` (Includes $${response.data.discount_applied} referral discount)` : ''}`)
+                setRefreshKey(prev => prev + 1)
             }
-            setError(errorMessage)
+        } catch (err: any) {
+            setError(`Failed to charge customer: ${err.response?.data?.error || err.message}`)
         } finally {
             setChargingCustomerId(null)
         }
@@ -238,81 +215,77 @@ function AdminDashboard() {
         return isNaN(numericPrice) ? '$0.00' : `$${numericPrice.toFixed(2)}`
     }
 
-    const renderCustomerCard = (customer: Customer) => {
-        const isCharging = chargingCustomerId === customer.id
-        const isRecurring = customer.metadata.payment_type === 'recurring' || 
-                           customer.metadata.payment_type === 'WEEKLY' || 
-                           customer.metadata.payment_type === 'BI_WEEKLY'
-        
+    const renderCustomerTable = () => {
         return (
-            <div key={customer.id} style={{
-                border: '1px solid #E2E8F0',
-                borderRadius: '8px',
-                padding: '16px',
-                marginBottom: '16px',
-                backgroundColor: 'white'
-            }}>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Created:</strong> {new Date(customer.created * 1000).toLocaleString()}
-                </div>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Service:</strong> {customer.metadata.service_type}
-                </div>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Payment Type:</strong> {customer.metadata.payment_type}
-                </div>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Price:</strong> ${customer.metadata.price}
-                </div>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Address:</strong> {customer.metadata.address}
-                </div>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Phone:</strong> {customer.metadata.phone}
-                </div>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Lot Size:</strong> {customer.metadata.lot_size}
-                </div>
-                {customer.metadata.charge_date && (
-                    <div style={{ marginBottom: '8px' }}>
-                        <strong>Last Charged:</strong> {customer.metadata.charge_date}
-                        <span style={{ color: '#666', fontSize: '0.9em' }}></span>
-                    </div>
-                )}
-                {customer.has_payment_method ? (
-                    <button
-                        onClick={() => handleChargeCustomer(customer.id, parseFloat(customer.metadata.price))}
-                        disabled={isCharging || (!isRecurring && customer.metadata.charged === 'true')}
-                        style={{
-                            padding: '8px 16px',
-                            backgroundColor: isCharging ? '#A0AEC0' : '#48BB78',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: isCharging ? 'not-allowed' : 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px'
-                        }}
-                    >
-                        {isCharging ? 'Processing...' : 'Charge Customer'}
-                    </button>
-                ) : (
-                    <div style={{
-                        padding: '8px 16px',
-                        backgroundColor: '#FEF2F2',
-                        color: '#DC2626',
-                        borderRadius: '6px',
-                        fontSize: '14px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                    }}>
-                        <span style={{ fontWeight: 'bold' }}>⚠️</span>
-                        Awaiting Payment Method
-                    </div>
-                )}
-            </div>
+            <table className="min-w-full bg-white border border-gray-300">
+                <thead>
+                    <tr className="bg-gray-100">
+                        <th className="px-4 py-2 border-b">Created</th>
+                        <th className="px-4 py-2 border-b">Address</th>
+                        <th className="px-4 py-2 border-b">Service Type</th>
+                        <th className="px-4 py-2 border-b">Lot Size</th>
+                        <th className="px-4 py-2 border-b">Phone</th>
+                        <th className="px-4 py-2 border-b">Base Price</th>
+                        <th className="px-4 py-2 border-b">Final Price</th>
+                        <th className="px-4 py-2 border-b">Referral</th>
+                        <th className="px-4 py-2 border-b">Status</th>
+                        <th className="px-4 py-2 border-b">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {filteredCustomers.map((customer) => (
+                        <tr key={customer.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-2 border-b">
+                                {new Date(customer.created * 1000).toLocaleDateString()}
+                            </td>
+                            <td className="px-4 py-2 border-b">{customer.metadata.address}</td>
+                            <td className="px-4 py-2 border-b">{customer.metadata.service_type}</td>
+                            <td className="px-4 py-2 border-b">{customer.metadata.lot_size}</td>
+                            <td className="px-4 py-2 border-b">{customer.metadata.phone}</td>
+                            <td className="px-4 py-2 border-b">${customer.metadata.base_price}</td>
+                            <td className="px-4 py-2 border-b">
+                                ${customer.metadata.final_amount}
+                                {customer.metadata.referral_discount && (
+                                    <span className="text-green-600 text-sm ml-1">
+                                        (-${customer.metadata.referral_discount})
+                                    </span>
+                                )}
+                            </td>
+                            <td className="px-4 py-2 border-b">
+                                {customer.metadata.referral_code ? (
+                                    <span className="text-green-600">
+                                        Code: {customer.metadata.referral_code}
+                                    </span>
+                                ) : '-'}
+                            </td>
+                            <td className="px-4 py-2 border-b">
+                                {customer.charged ? (
+                                    <span className="text-green-600">
+                                        Charged on {customer.metadata.charge_date}
+                                    </span>
+                                ) : (
+                                    <span className="text-yellow-600">Pending</span>
+                                )}
+                            </td>
+                            <td className="px-4 py-2 border-b">
+                                {!customer.charged && customer.has_payment_method && (
+                                    <button
+                                        onClick={() => handleChargeCustomer(customer.id)}
+                                        disabled={chargingCustomerId === customer.id}
+                                        className={`px-4 py-2 rounded ${
+                                            chargingCustomerId === customer.id
+                                                ? 'bg-gray-400 cursor-not-allowed'
+                                                : 'bg-blue-500 hover:bg-blue-600 text-white'
+                                        }`}
+                                    >
+                                        {chargingCustomerId === customer.id ? 'Charging...' : 'Charge'}
+                                    </button>
+                                )}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
         )
     }
 
@@ -321,7 +294,7 @@ function AdminDashboard() {
         const paidCustomers = customers.filter(c => c.charged).length
         const totalRevenue = customers
             .filter(c => c.charged)
-            .reduce((sum, c) => sum + parseFloat(c.metadata.price), 0)
+            .reduce((sum, c) => sum + parseFloat(c.metadata.final_amount || c.metadata.base_price), 0)
 
         return (
             <div style={{
@@ -561,13 +534,7 @@ function AdminDashboard() {
                 </button>
             </div>
 
-            <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-                gap: '16px'
-            }}>
-                {filteredCustomers.map(customer => renderCustomerCard(customer))}
-            </div>
+            {renderCustomerTable()}
         </div>
     )
 }
