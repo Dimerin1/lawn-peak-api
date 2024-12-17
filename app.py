@@ -47,24 +47,33 @@ except Exception as e:
 # Create Flask app
 app = Flask(__name__)
 
-# Configure CORS
+# Configure CORS with specific origins
+ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'https://lawnpeak.com',
+    'https://lawn-peak-front.onrender.com',
+    'https://lawn-peak-api.onrender.com'
+]
+
 CORS(app, 
      resources={r"/*": {
-         "origins": "*",  # Allow all origins for now
+         "origins": ALLOWED_ORIGINS,
          "methods": ["GET", "POST", "OPTIONS"],
-         "allow_headers": ["Content-Type", "Authorization", "Stripe-Publishable-Key", "Origin"],
+         "allow_headers": ["Content-Type", "Authorization", "Stripe-Publishable-Key"],
          "expose_headers": ["Content-Type"],
          "supports_credentials": False,
          "max_age": 3600
      }}
 )
 
-# Add CORS preflight handler
 @app.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Stripe-Publishable-Key')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    origin = request.headers.get('Origin')
+    if origin in ALLOWED_ORIGINS:
+        response.headers['Access-Control-Allow-Origin'] = origin
+    response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Stripe-Publishable-Key'
+    response.headers['Access-Control-Max-Age'] = '3600'
     return response
 
 @app.errorhandler(Exception)

@@ -432,7 +432,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
             console.log('Creating setup intent with data:', requestData);
 
             // Use environment-based API URL
-            const apiUrl = process.env.NODE_ENV === 'development' 
+            const apiUrl = window.location.hostname === 'localhost'
                 ? 'http://localhost:8080/create-setup-intent'
                 : 'https://lawn-peak-api.onrender.com/create-setup-intent';
 
@@ -445,6 +445,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     'Accept': 'application/json',
                 },
                 mode: 'cors',
+                credentials: 'omit',
                 body: JSON.stringify(requestData)
             });
 
