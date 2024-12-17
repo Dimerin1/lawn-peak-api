@@ -31,16 +31,21 @@ else:
 GOOGLE_SERVICES_AVAILABLE = False  # Default to False
 google_credentials = None
 try:
-    credentials_path = 'google-credentials.json'
-    if os.path.exists(credentials_path):
-        google_credentials = service_account.Credentials.from_service_account_file(
-            credentials_path,
-            scopes=['https://www.googleapis.com/auth/spreadsheets']
-        )
-        GOOGLE_SERVICES_AVAILABLE = True
-        logger.info("Google credentials loaded successfully")
-    else:
-        logger.warning("Google credentials file not found - Sheets integration disabled")
+    # Check both local and Render paths for credentials
+    credentials_paths = ['google-credentials.json', '/etc/secrets/google-credentials.json']
+    
+    for path in credentials_paths:
+        if os.path.exists(path):
+            google_credentials = service_account.Credentials.from_service_account_file(
+                path,
+                scopes=['https://www.googleapis.com/auth/spreadsheets']
+            )
+            GOOGLE_SERVICES_AVAILABLE = True
+            logger.info(f"Google credentials loaded successfully from {path}")
+            break
+
+    if not GOOGLE_SERVICES_AVAILABLE:
+        logger.warning("Google credentials file not found in any location")
 except Exception as e:
     logger.error(f"Failed to load Google credentials: {str(e)}")
 
