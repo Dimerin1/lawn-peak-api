@@ -181,37 +181,38 @@ def create_setup_intent():
         data = request.json
         print("Received setup intent request with data:", data)
         return_url = data.get('return_url')
+        quote_data = data.get('quoteData', {})
+        is_test_mode = data.get('test_mode', True)  # Default to test mode for safety
         
         if not return_url:
             print("Error: Return URL is required")
             return jsonify({'error': 'Return URL is required'}), 400
 
-        # Determine payment type based on service type
-        service_type = data.get('service_type')
-        payment_type = 'one_time' if service_type == 'ONE_TIME' else 'recurring'
-        price = str(data.get('price', '0'))  # Ensure price is always a string
-
         # Create a Customer
         print("Creating Stripe customer with metadata:", {
-            'service_type': service_type,
-            'payment_type': payment_type,
-            'address': data.get('address'),
-            'lot_size': data.get('lot_size'),
-            'phone': data.get('phone'),
-            'price': price
+            'service_type': quote_data.get('service'),
+            'address': quote_data.get('address'),
+            'lot_size': quote_data.get('lotSize'),
+            'phone': quote_data.get('phone'),
+            'price': str(quote_data.get('price', '0'))
         })
         
         customer = stripe.Customer.create(
             metadata={
-                'service_type': service_type,
-                'payment_type': payment_type,
-                'address': data.get('address'),
-                'lot_size': data.get('lot_size'),
-                'phone': data.get('phone'),
-                'price': price  # Store price for later charging
+                'service_type': quote_data.get('service'),
+                'address': quote_data.get('address'),
+                'lot_size': quote_data.get('lotSize'),
+                'phone': quote_data.get('phone'),
+                'price': str(quote_data.get('price', '0'))
             }
         )
         print("Created Stripe customer:", customer.id)
+        
+        # In test mode, we'll use a fixed success_url to avoid the {CUSTOMER_ID} placeholder issue
+        success_url = (
+            return_url + '?setup=success&customer_id=' + 
+            ('test_customer' if is_test_mode else '{CUSTOMER_ID}')
+        )
         
         # Create a Stripe Checkout Session for setup only
         print("Creating Stripe checkout session for customer:", customer.id)
@@ -220,14 +221,13 @@ def create_setup_intent():
             customer=customer.id,
             payment_method_types=['card'],
             metadata={
-                'service_type': service_type,
-                'payment_type': payment_type,
-                'address': data.get('address'),
-                'lot_size': data.get('lot_size'),
-                'phone': data.get('phone'),
-                'price': price
+                'service_type': quote_data.get('service'),
+                'address': quote_data.get('address'),
+                'lot_size': quote_data.get('lotSize'),
+                'phone': quote_data.get('phone'),
+                'price': str(quote_data.get('price', '0'))
             },
-            success_url=return_url + '?setup=success&customer_id={CUSTOMER_ID}',
+            success_url=success_url,
             cancel_url=return_url + '?setup=canceled',
             payment_intent_data=None,  # Ensure no payment intent is created
             consent_collection={
@@ -241,6 +241,7 @@ def create_setup_intent():
         )
         print("Created Stripe checkout session:", session.id)
         print("Session URL:", session.url)
+        print("Success URL:", success_url)
         
         response = jsonify({
             'setupIntentUrl': session.url
