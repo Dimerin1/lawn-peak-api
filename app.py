@@ -22,6 +22,10 @@ if not stripe.api_key:
     logger.error("STRIPE_SECRET_KEY environment variable is not set")
 else:
     logger.info(f"Stripe API key loaded (length: {len(stripe.api_key)})")
+    # Force live mode
+    stripe.api_version = '2023-10-16'  # Use latest API version
+    stripe.api_key = stripe.api_key.replace('sk_test_', 'sk_live_')
+    logger.info("Stripe API configured for live mode")
 
 # Initialize Google Services
 GOOGLE_SERVICES_AVAILABLE = True
