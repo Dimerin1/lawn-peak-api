@@ -54,7 +54,11 @@ const errorStyle = {
 
 const getInputStyle = (hasError) => ({
     ...inputStyle,
-    border: hasError ? '1px solid #ef4444' : 'none',
+    border: hasError ? '2px solid #ef4444' : '2px solid #F5F5F5',
+    ":focus": {
+        border: hasError ? '2px solid #ef4444' : '2px solid #4CAF50',
+        backgroundColor: "#FFFFFF"
+    }
 });
 
 const selectStyle = {
@@ -68,6 +72,10 @@ const selectStyle = {
     backgroundSize: "1em",
     paddingRight: "3rem",
     cursor: "pointer",
+    ":hover": {
+        border: "2px solid #4CAF50",
+        backgroundColor: "#FFFFFF"
+    }
 }
 
 const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, handlePayment }) => {
@@ -251,6 +259,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
     const [paymentError, setPaymentError] = React.useState("");
     const [showPrice, setShowPrice] = React.useState(false)
     const [showCalendar, setShowCalendar] = React.useState(false)
+    const [stripePublishableKey, setStripePublishableKey] = React.useState("");
     const [selectedDate, setSelectedDate] = React.useState(() => {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
@@ -264,6 +273,19 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         service: false,
         phone: false
     });
+
+    React.useEffect(() => {
+        // Fetch Stripe publishable key from backend
+        fetch('http://localhost:8080/config')
+            .then(response => response.json())
+            .then(data => {
+                setStripePublishableKey(data.publishableKey);
+            })
+            .catch(error => {
+                console.error('Error fetching Stripe config:', error);
+                setPaymentError('Failed to load payment configuration');
+            });
+    }, []);
 
     const formatDateForDisplay = (date) => {
         const month = date.toLocaleString('en-US', { month: 'short' });
@@ -381,7 +403,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
             address: !formData.address,
             lotSize: !formData.lotSize,
             service: !formData.service,
-            phone: !formData.phone || formData.phone.length < 10
+            phone: !formData.phone || formData.phone.length < 10 // Basic phone validation
         };
         setFieldErrors(errors);
 
@@ -409,12 +431,12 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
 
             console.log('Creating setup intent with data:', requestData);
 
-            // Use production API URL
-            const response = await fetch('https://lawn-peak-api.onrender.com/create-setup-intent', {
+            // Use local API URL for development
+            const response = await fetch('http://localhost:8080/create-setup-intent', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Origin': 'https://lawnpeak.com'
+                    'Origin': 'http://localhost:3000'
                 },
                 body: JSON.stringify(requestData),
                 credentials: 'omit'
@@ -488,9 +510,6 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         );
     };
 
-    // Stripe configuration
-    const stripePublishableKey = 'pk_live_MFIjF2jscJwoZyT1M9iq3XFL00lrHwBGaP';
-
     return (
         <div style={{
             display: "flex",
@@ -498,7 +517,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
             gap: "20px",
             maxWidth: "600px",
             margin: "0 auto",
-            padding: "20px"
+            padding: "0"
         }}>
             <AddressInput
                 value={formData.address}
@@ -964,6 +983,10 @@ function AddressInput({ value, onChange, onSelect, style, placeholder }) {
                             setSelectedAddress(place.formatted_address);
                             onChange(place.formatted_address);
                             onSelect(place.formatted_address);
+                            // Prevent browser autofill from overriding
+                            if (inputRef.current) {
+                                inputRef.current.value = place.formatted_address;
+                            }
                         }
                     });
 
@@ -989,19 +1012,14 @@ function AddressInput({ value, onChange, onSelect, style, placeholder }) {
                 window.google?.maps?.event?.clearInstanceListeners(autocompleteRef.current);
             }
         };
-    }, [onSelect, onChange]);
+    }, []);
 
+    // Keep input value in sync with selectedAddress
     React.useEffect(() => {
-        if (value !== selectedAddress) {
-            setSelectedAddress(value || "");
+        if (inputRef.current && selectedAddress) {
+            inputRef.current.value = selectedAddress;
         }
-    }, [value]);
-
-    const handleInputChange = (e) => {
-        const newValue = e.target.value;
-        setSelectedAddress(newValue);
-        onChange(newValue);
-    };
+    }, [selectedAddress]);
 
     return (
         <div style={{ width: "100%" }}>
@@ -1009,10 +1027,15 @@ function AddressInput({ value, onChange, onSelect, style, placeholder }) {
                 <input
                     ref={inputRef}
                     type="text"
-                    value={selectedAddress}
-                    onChange={handleInputChange}
+                    defaultValue={selectedAddress}
+                    onChange={(e) => {
+                        const value = e.target.value;
+                        setSelectedAddress(value);
+                        onChange(value);
+                    }}
                     placeholder={placeholder}
                     disabled={isLoadingAddress}
+                    autoComplete="off"
                     style={{
                         ...inputStyle,
                         "::placeholder": {

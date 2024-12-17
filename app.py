@@ -17,12 +17,15 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Initialize Stripe with the key from environment
-stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
-if not stripe.api_key:
+stripe_key = os.getenv('STRIPE_SECRET_KEY')
+if not stripe_key:
     logger.error("STRIPE_SECRET_KEY environment variable is not set")
 else:
-    logger.info(f"Stripe API key loaded: {stripe.api_key[:10]}...")
-    logger.info(f"Using {'test' if 'test' in stripe.api_key else 'live'} mode")
+    # Remove any whitespace or newlines
+    stripe_key = stripe_key.strip()
+    stripe.api_key = stripe_key
+    logger.info(f"Using Stripe API key: {stripe_key[:10]}...")
+    logger.info(f"Using {'test' if 'test' in stripe_key else 'live'} mode")
 
 # Initialize Google Services
 GOOGLE_SERVICES_AVAILABLE = True
@@ -43,7 +46,7 @@ logger.info("Flask app created")
 # Configure CORS
 CORS(app, 
      resources={r"/*": {
-         "origins": ["https://lawnpeak.com"],  # Production only
+         "origins": ["http://localhost:3000", "https://lawn-peak-front.onrender.com"],  # Allow both local and production
          "methods": ["GET", "POST", "OPTIONS"],
          "allow_headers": ["Content-Type", "Authorization", "Origin"],
          "expose_headers": ["Content-Type"],
@@ -52,11 +55,42 @@ CORS(app,
      }}
 )
 
+# Admin credentials (in production, use environment variables)
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')
+
+@app.route('/admin-login', methods=['POST', 'OPTIONS'])
+def admin_login():
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'POST')
+        return response
+
+    try:
+        data = request.json
+        password = data.get('password')
+
+        if not password:
+            return jsonify({'error': 'Password is required'}), 400
+
+        if password == ADMIN_PASSWORD:
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'Invalid password'}), 401
+
+    except Exception as e:
+        logger.error(f"Error in admin login: {str(e)}")
+        return jsonify({'error': 'Server error'}), 500
+
 @app.before_request
 def handle_preflight():
     if request.method == "OPTIONS":
         response = make_response()
-        response.headers.add('Access-Control-Allow-Origin', 'https://lawnpeak.com')
+        if request.headers.get('Origin') == 'http://localhost:3000':
+            response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+        else:
+            response.headers.add('Access-Control-Allow-Origin', 'https://lawn-peak-front.onrender.com')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Origin')
         response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
         response.headers.add('Access-Control-Max-Age', '3600')
@@ -64,7 +98,10 @@ def handle_preflight():
 
 @app.after_request
 def after_request(response):
-    response.headers['Access-Control-Allow-Origin'] = 'https://lawnpeak.com'
+    if request.headers.get('Origin') == 'http://localhost:3000':
+        response.headers['Access-Control-Allow-Origin'] = 'http://localhost:3000'
+    else:
+        response.headers['Access-Control-Allow-Origin'] = 'https://lawn-peak-front.onrender.com'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Origin'
     response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
     response.headers['Access-Control-Max-Age'] = '3600'
@@ -219,7 +256,7 @@ def debug():
         'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
     })
 
-@app.route('/debug/stripe', methods=['GET'])
+@app.route('/debug/stripe')
 def debug_stripe():
     try:
         # Test the Stripe connection
@@ -767,6 +804,16 @@ def append_to_sheet_endpoint():
         logger.error(f"Error appending to sheet: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/config')
+def get_config():
+    publishable_key = os.getenv('STRIPE_PUBLISHABLE_KEY')
+    if not publishable_key:
+        logger.error("STRIPE_PUBLISHABLE_KEY environment variable is not set")
+        return jsonify({'error': 'Stripe configuration not found'}), 500
+    return jsonify({
+        'publishableKey': publishable_key
+    })
+
 # Google Sheets Integration
 def get_sheets_service():
     credentials = service_account.Credentials.from_service_account_info({
@@ -983,41 +1030,6 @@ def submit_quote():
     except Exception as e:
         logger.error(f"Error in submit_quote: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-@app.route('/admin-login', methods=['POST', 'OPTIONS'])
-def admin_login():
-    # Handle preflight CORS request
-    if request.method == "OPTIONS":
-        response = make_response()
-        response.headers.add("Access-Control-Allow-Origin", "*")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
-        response.headers.add("Access-Control-Allow-Methods", "POST")
-        return response
-
-    try:
-        data = request.json
-        password = data.get('password')
-        
-        # Simple password check - you might want to make this more secure
-        if password == os.getenv('ADMIN_PASSWORD', 'Qwe123asd456!@'):
-            response = jsonify({'success': True})
-        else:
-            response = jsonify({'error': 'Invalid password'}), 401
-            
-    except Exception as e:
-        print('Error in admin login:', str(e))
-        response = jsonify({'error': 'An unexpected error occurred'}), 500
-
-    # Add CORS headers to the response
-    if isinstance(response, tuple):
-        response_obj, status_code = response
-        response = make_response(response_obj, status_code)
-    else:
-        response = make_response(response)
-
-    response.headers.add("Access-Control-Allow-Origin", "*")
-    response.headers.add("Access-Control-Allow-Headers", "Content-Type")
-    return response
 
 @app.route('/list-customers', methods=['GET'])
 def list_customers():
