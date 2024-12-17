@@ -24,6 +24,20 @@ load_dotenv()
 # Initialize database tables
 referral_db.init_referral_tables()
 
+# Initialize Flask app with CORS
+app = Flask(__name__)
+CORS(app, resources={
+    r"/*": {
+        "origins": [
+            "http://localhost:3000",
+            "https://lawn-peak-front-staging.onrender.com",
+            "https://lawn-peak.onrender.com"
+        ],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
+
 # Initialize referral system database
 referral_db.init_referral_tables()
 
@@ -60,35 +74,13 @@ try:
 except Exception as e:
     logger.error(f"Failed to load Google credentials: {str(e)}")
 
-# Create Flask app
-app = Flask(__name__)
-
-# Configure CORS with specific origins
-ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'https://lawnpeak.com',
-    'https://lawn-peak-front.onrender.com',
-    'https://lawn-peak-api.onrender.com'
-]
-
-CORS(app, 
-     resources={r"/*": {
-         "origins": ALLOWED_ORIGINS,
-         "methods": ["GET", "POST", "OPTIONS"],
-         "allow_headers": ["Content-Type", "Authorization", "Stripe-Publishable-Key"],
-         "expose_headers": ["Content-Type"],
-         "supports_credentials": False,
-         "max_age": 3600
-     }}
-)
-
 @app.after_request
 def after_request(response):
     origin = request.headers.get('Origin')
-    if origin in ALLOWED_ORIGINS:
+    if origin in ["http://localhost:3000", "https://lawn-peak-front-staging.onrender.com", "https://lawn-peak.onrender.com"]:
         response.headers['Access-Control-Allow-Origin'] = origin
     response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Stripe-Publishable-Key'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
     response.headers['Access-Control-Max-Age'] = '3600'
     return response
 
