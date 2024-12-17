@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: lawn-peak-api-staging
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.0
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: PORT
+        value: 10000
+      - key: ENABLE_REFERRAL_SYSTEM
+        value: true
+
+  - type: web
+    name: lawn-peak-front-staging
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        value: https://lawn-peak-api-staging.onrender.com
+      - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: PORT
+        value: 3000
+      - key: NEXT_PUBLIC_ENABLE_REFERRAL_SYSTEM
+        value: true

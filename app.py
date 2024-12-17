@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 import datetime
+import referral_db
+from feature_flags import FeatureFlags, feature_flag_required
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -15,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
+
+# Initialize referral system database
+referral_db.init_referral_tables()
 
 # Initialize Stripe with the key from environment
 stripe_key = os.getenv('STRIPE_SECRET_KEY')
@@ -348,31 +353,62 @@ def create_payment_intent():
     try:
         data = request.json
         amount = data.get('amount')
+        referral_code = data.get('referral_code')
+        customer_email = data.get('email')
         
         if not amount:
             return jsonify({'error': 'Amount is required'}), 400
 
+        final_amount = float(amount)
+        referral_data = None
+
+        # Apply referral discount if code is provided
+        if referral_code and customer_email:
+            referrer_email, error = referral_db.validate_referral_code(referral_code, customer_email)
+            if referrer_email and not error:
+                # Apply 15% discount
+                discount_amount = final_amount * 0.15
+                final_amount = final_amount - discount_amount
+                referral_data = {
+                    'referral_code': referral_code,
+                    'referrer_email': referrer_email,
+                    'discount_amount': discount_amount
+                }
+
         # Create a PaymentIntent with the order amount and currency
         intent = stripe.PaymentIntent.create(
-            amount=int(float(amount) * 100),  # Convert to cents
+            amount=int(final_amount * 100),  # Convert to cents
             currency='usd',
             payment_method_types=['card'],
             metadata={
                 'service_type': data.get('service_type', ''),
                 'address': data.get('address', ''),
-                'lot_size': data.get('lot_size', '')
+                'lot_size': data.get('lot_size', ''),
+                'referral_code': referral_code if referral_data else None,
+                'referrer_email': referral_data['referrer_email'] if referral_data else None
             }
         )
 
+        # If this is a referral purchase, record it
+        if referral_data:
+            referral_db.record_referral_use(
+                referral_code,
+                customer_email,
+                intent.id,
+                20.0  # $20 reward for referrer
+            )
+
         return jsonify({
             'clientSecret': intent.client_secret,
-            'publishableKey': os.getenv('STRIPE_PUBLISHABLE_KEY', 'pk_test_51ONqUHFIWJQKnfxXBSWTlcKRGpvhBWRtQnxQxBTqVPxAYF3IkXlPHbOJBHQIxULhsqOQRXhTPTz8F8UbNrE7KtGD00yrTDUQbR')
+            'publishableKey': os.getenv('STRIPE_PUBLISHABLE_KEY'),
+            'finalAmount': final_amount,
+            'discount': referral_data['discount_amount'] if referral_data else 0
         })
 
     except stripe.error.StripeError as e:
         return jsonify({'error': str(e.user_message)}), 400
     except Exception as e:
-        print('Error creating payment intent:', str(e))
+        logger.error(f'Error creating payment intent: {str(e)}')
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
 @app.route('/create-setup-intent', methods=['POST', 'OPTIONS'])
@@ -434,27 +470,58 @@ def create_setup_intent():
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    event = None
-    payload = request.data
+    payload = request.get_data()
     sig_header = request.headers.get('Stripe-Signature')
-    webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
 
     try:
         event = stripe.Webhook.construct_event(
-            payload, sig_header, webhook_secret
+            payload, sig_header, os.getenv('STRIPE_WEBHOOK_SECRET')
         )
-    except ValueError as e:
-        return jsonify({'error': 'Invalid payload'}), 400
-    except stripe.error.SignatureVerificationError as e:
-        return jsonify({'error': 'Invalid signature'}), 400
 
-    # Handle the event
-    if event['type'] == 'payment_intent.succeeded':
-        payment_intent = event['data']['object']
-        print('Payment succeeded:', payment_intent['id'])
-        # Here you can add logic to update your database, send confirmation emails, etc.
-    
-    return jsonify({'status': 'success'})
+        if event['type'] == 'payment_intent.succeeded':
+            payment_intent = event['data']['object']
+            referral_code = payment_intent.metadata.get('referral_code')
+            
+            if referral_code:
+                # Get the referral use record
+                conn = sqlite3.connect('payments.db')
+                c = conn.cursor()
+                referral_use = c.execute('''
+                    SELECT id, referee_email FROM referral_uses 
+                    WHERE order_id = ? AND reward_status = 'PENDING'
+                ''', (payment_intent.id,)).fetchone()
+                
+                if referral_use:
+                    referral_use_id, referee_email = referral_use
+                    
+                    # Create Stripe Customer Credit
+                    credit = stripe.Customer.create_balance_transaction(
+                        payment_intent.customer,
+                        {
+                            'amount': 2000,  # $20 in cents
+                            'currency': 'usd',
+                            'description': f'Referral reward for referring {referee_email}'
+                        }
+                    )
+                    
+                    # Record the reward
+                    referral_db.create_reward(
+                        payment_intent.metadata.get('referrer_email'),
+                        20.0,
+                        referral_use_id,
+                        credit.id
+                    )
+                    
+                    # Update reward status
+                    referral_db.update_reward_status(referral_use_id, 'COMPLETED')
+                
+                conn.close()
+
+        return jsonify({'status': 'success'})
+
+    except Exception as e:
+        logger.error(f'Webhook error: {str(e)}')
+        return jsonify({'error': str(e)}), 400
 
 @app.route('/api/lot-size', methods=['POST'])
 def lot_size_endpoint():
@@ -592,7 +659,7 @@ def format_sheet():
         # First, get all values
         result = service.spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
-            range='A:I'
+            range='A:J'
         ).execute()
         values = result.get('values', [])
 
@@ -605,7 +672,7 @@ def format_sheet():
         # Clear the entire sheet first
         service.spreadsheets().values().clear(
             spreadsheetId=SPREADSHEET_ID,
-            range='A:I',
+            range='A:J',
             body={}
         ).execute()
 
@@ -629,12 +696,13 @@ def format_sheet():
             'Address',
             'Lot Size',
             'Price ($)',
-            'Charged Date'
+            'Charged Date',
+            'Start Date'
         ]
         
         service.spreadsheets().values().update(
             spreadsheetId=SPREADSHEET_ID,
-            range='A1:I1',
+            range='A1:J1',
             valueInputOption='USER_ENTERED',
             body={'values': [headers]}
         ).execute()
@@ -649,7 +717,7 @@ def format_sheet():
                         "startRowIndex": 0,
                         "endRowIndex": 1,
                         "startColumnIndex": 0,
-                        "endColumnIndex": 9
+                        "endColumnIndex": 10
                     },
                     "cell": {
                         "userEnteredFormat": {
@@ -679,7 +747,7 @@ def format_sheet():
                         "startRowIndex": 0,
                         "endRowIndex": current_row + 1,
                         "startColumnIndex": 0,
-                        "endColumnIndex": 9
+                        "endColumnIndex": 10
                     },
                     "top": {"style": "SOLID"},
                     "bottom": {"style": "SOLID"},
@@ -696,7 +764,7 @@ def format_sheet():
                         "sheetId": 0,
                         "dimension": "COLUMNS",
                         "startIndex": 0,
-                        "endIndex": 9
+                        "endIndex": 10
                     }
                 }
             },
@@ -762,6 +830,26 @@ def format_sheet():
                     "fields": "userEnteredFormat.numberFormat"
                 }
             },
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": 1,
+                        "endRowIndex": current_row + 1,
+                        "startColumnIndex": 9,  # Start Date column
+                        "endColumnIndex": 10
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "numberFormat": {
+                                "type": "DATE_TIME",
+                                "pattern": "yyyy-mm-dd hh:mm:ss"
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat.numberFormat"
+                }
+            },
             # Freeze header row
             {
                 "updateSheetProperties": {
@@ -782,7 +870,7 @@ def format_sheet():
                         "startRowIndex": 0,
                         "endRowIndex": current_row + 1,
                         "startColumnIndex": 0,
-                        "endColumnIndex": 9
+                        "endColumnIndex": 10
                     },
                     "cell": {
                         "userEnteredFormat": {
@@ -829,196 +917,74 @@ def get_config():
         'publishableKey': publishable_key
     })
 
-# Google Sheets Integration
-def get_sheets_service():
-    credentials = service_account.Credentials.from_service_account_info({
-        "type": "service_account",
-        "project_id": "lawn-quote-calculator",
-        "private_key_id": os.getenv('GOOGLE_SHEETS_PRIVATE_KEY_ID'),
-        "private_key": os.getenv('GOOGLE_SHEETS_PRIVATE_KEY').replace('\\n', '\n'),
-        "client_email": os.getenv('GOOGLE_SHEETS_CLIENT_EMAIL'),
-        "client_id": os.getenv('GOOGLE_SHEETS_CLIENT_ID'),
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-        "client_x509_cert_url": os.getenv('GOOGLE_SHEETS_CLIENT_X509_CERT_URL')
-    })
-    return build('sheets', 'v4', credentials=credentials)
-
-def append_to_sheet(data):
+# Referral System Endpoints
+@app.route('/api/referral/create', methods=['POST'])
+@feature_flag_required(FeatureFlags.REFERRAL_SYSTEM)
+def create_referral():
+    """Create a new referral code for a customer."""
     try:
-        logger.info("Creating Google Sheets service...")
-        service = get_sheets_service()
-        SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID', '19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA')
-        logger.info(f"Using spreadsheet ID: {SPREADSHEET_ID}")
+        data = request.json
+        customer_email = data.get('customer_email')
+        if not customer_email:
+            return jsonify({'error': 'Customer email is required'}), 400
         
-        # Format data for sheets
-        row = [
-            time.strftime('%Y-%m-%d %H:%M:%S'),  # Date
-            data.get('name', ''),
-            data.get('email', ''),
-            data.get('service_type', ''),
-            data.get('phone', ''),
-            data.get('address', ''),
-            data.get('lot_size', ''),
-            str(data.get('price', '')),
-            data.get('charge_date', '')
-        ]
+        expiration_days = data.get('expiration_days')
+        code = referral_db.create_referral_code(customer_email, expiration_days)
         
-        logger.info(f"Prepared row data: {row}")
-        
-        # First, get the current number of rows
-        result = service.spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range='A:I'
-        ).execute()
-        values = result.get('values', [])
-        current_row = len(values) + 1
-
-        # If this is the first row, add headers
-        if current_row == 1:
-            headers = [
-                'Timestamp',
-                'Customer Name',
-                'Email',
-                'Service Type',
-                'Phone Number',
-                'Address',
-                'Lot Size',
-                'Price ($)',
-                'Charged Date'
-            ]
-            body = {
-                'values': [headers]
-            }
-            service.spreadsheets().values().append(
-                spreadsheetId=SPREADSHEET_ID,
-                range='A1:I1',
-                valueInputOption='USER_ENTERED',
-                insertDataOption='INSERT_ROWS',
-                body=body
-            ).execute()
-            current_row = 2
-
-        # Append the new row
-        body = {
-            'values': [row]
-        }
-        service.spreadsheets().values().append(
-            spreadsheetId=SPREADSHEET_ID,
-            range='A:I',
-            valueInputOption='USER_ENTERED',
-            insertDataOption='INSERT_ROWS',
-            body=body
-        ).execute()
-
-        # Apply formatting
-        requests = [
-            # Format headers
-            {
-                "repeatCell": {
-                    "range": {
-                        "sheetId": 0,
-                        "startRowIndex": 0,
-                        "endRowIndex": 1,
-                        "startColumnIndex": 0,
-                        "endColumnIndex": 9
-                    },
-                    "cell": {
-                        "userEnteredFormat": {
-                            "backgroundColor": {
-                                "red": 0.2,
-                                "green": 0.5,
-                                "blue": 0.3
-                            },
-                            "textFormat": {
-                                "bold": True,
-                                "foregroundColor": {
-                                    "red": 1.0,
-                                    "green": 1.0,
-                                    "blue": 1.0
-                                }
-                            }
-                        }
-                    },
-                    "fields": "userEnteredFormat(backgroundColor,textFormat)"
-                }
-            },
-            # Add borders
-            {
-                "updateBorders": {
-                    "range": {
-                        "sheetId": 0,
-                        "startRowIndex": 0,
-                        "endRowIndex": current_row + 1,
-                        "startColumnIndex": 0,
-                        "endColumnIndex": 9
-                    },
-                    "top": {"style": "SOLID"},
-                    "bottom": {"style": "SOLID"},
-                    "left": {"style": "SOLID"},
-                    "right": {"style": "SOLID"},
-                    "innerHorizontal": {"style": "SOLID"},
-                    "innerVertical": {"style": "SOLID"}
-                }
-            },
-            # Auto-resize columns
-            {
-                "autoResizeDimensions": {
-                    "dimensions": {
-                        "sheetId": 0,
-                        "dimension": "COLUMNS",
-                        "startIndex": 0,
-                        "endIndex": 9
-                    }
-                }
-            },
-            # Format price column as currency
-            {
-                "repeatCell": {
-                    "range": {
-                        "sheetId": 0,
-                        "startRowIndex": 1,
-                        "endRowIndex": current_row + 1,
-                        "startColumnIndex": 7,
-                        "endColumnIndex": 8
-                    },
-                    "cell": {
-                        "userEnteredFormat": {
-                            "numberFormat": {
-                                "type": "CURRENCY",
-                                "pattern": "$#,##0.00"
-                            }
-                        }
-                    },
-                    "fields": "userEnteredFormat.numberFormat"
-                }
-            },
-            # Freeze header row
-            {
-                "updateSheetProperties": {
-                    "properties": {
-                        "sheetId": 0,
-                        "gridProperties": {
-                            "frozenRowCount": 1
-                        }
-                    },
-                    "fields": "gridProperties.frozenRowCount"
-                }
-            }
-        ]
-
-        # Apply all formatting
-        service.spreadsheets().batchUpdate(
-            spreadsheetId=SPREADSHEET_ID,
-            body={"requests": requests}
-        ).execute()
-
-        logger.info("Successfully formatted sheet")
-        return True
+        if code:
+            logger.info(f"Created referral code {code} for customer {customer_email}")
+            return jsonify({'code': code})
+        return jsonify({'error': 'Failed to create referral code'}), 500
     except Exception as e:
-        logger.error(f"Error appending to sheet: {str(e)}")
-        return False
+        logger.error(f"Error creating referral code: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/referral/validate', methods=['POST'])
+@feature_flag_required(FeatureFlags.REFERRAL_SYSTEM)
+def validate_referral():
+    """Validate a referral code."""
+    try:
+        data = request.json
+        code = data.get('code')
+        referee_email = data.get('referee_email')
+        
+        if not all([code, referee_email]):
+            return jsonify({'error': 'Code and referee email are required'}), 400
+        
+        referrer_email, error = referral_db.validate_referral_code(code, referee_email)
+        if error:
+            return jsonify({'error': error}), 400
+            
+        return jsonify({
+            'valid': True,
+            'referrer_email': referrer_email,
+            'discount': 0.15  # 15% discount for referred customers
+        })
+    except Exception as e:
+        logger.error(f"Error validating referral code: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/referral/rewards/<customer_email>', methods=['GET'])
+@feature_flag_required(FeatureFlags.REFERRAL_SYSTEM)
+def get_rewards(customer_email):
+    """Get active rewards for a customer."""
+    try:
+        rewards = referral_db.get_customer_rewards(customer_email)
+        return jsonify({'rewards': rewards})
+    except Exception as e:
+        logger.error(f"Error getting rewards: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/referral/statistics/<customer_email>', methods=['GET'])
+@feature_flag_required(FeatureFlags.REFERRAL_SYSTEM)
+def get_referral_stats(customer_email):
+    """Get referral statistics for a customer."""
+    try:
+        stats = referral_db.get_referral_statistics(customer_email)
+        return jsonify(stats)
+    except Exception as e:
+        logger.error(f"Error getting referral statistics: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/submit-quote', methods=['POST'])
 def submit_quote():
@@ -1027,11 +993,12 @@ def submit_quote():
         data = request.json
         logger.info(f"Quote data received: {data}")
         
-        required_fields = ['name', 'email', 'service_type', 'phone', 'address', 'lot_size', 'price']
+        required_fields = ['name', 'email', 'service_type', 'phone', 'address', 'lot_size', 'price', 'start_date']
         
         if not all(field in data for field in required_fields):
-            logger.error(f"Missing required fields. Received fields: {data.keys()}")
-            return jsonify({'error': 'Missing required fields'}), 400
+            missing_fields = [field for field in required_fields if field not in data]
+            logger.error(f"Missing required fields: {missing_fields}. Received fields: {data.keys()}")
+            return jsonify({'error': f'Missing required fields: {missing_fields}'}), 400
             
         # Store in Google Sheets
         logger.info("Attempting to store in Google Sheets...")
@@ -1151,6 +1118,99 @@ def get_lot_size(address):
     except Exception as e:
         logger.error(f'Error in get_lot_size: {str(e)}')
         return None
+
+# Google Sheets Integration
+def get_sheets_service():
+    credentials = service_account.Credentials.from_service_account_info({
+        "type": "service_account",
+        "project_id": "lawn-quote-calculator",
+        "private_key_id": os.getenv('GOOGLE_SHEETS_PRIVATE_KEY_ID'),
+        "private_key": os.getenv('GOOGLE_SHEETS_PRIVATE_KEY').replace('\\n', '\n'),
+        "client_email": os.getenv('GOOGLE_SHEETS_CLIENT_EMAIL'),
+        "client_id": os.getenv('GOOGLE_SHEETS_CLIENT_ID'),
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": os.getenv('GOOGLE_SHEETS_CLIENT_X509_CERT_URL')
+    })
+    return build('sheets', 'v4', credentials=credentials)
+
+def append_to_sheet(data):
+    try:
+        logger.info("Creating Google Sheets service...")
+        service = get_sheets_service()
+        SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID', '19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA')
+        logger.info(f"Using spreadsheet ID: {SPREADSHEET_ID}")
+        logger.info(f"Received data: {data}")
+        
+        # Format data for sheets
+        row = [
+            time.strftime('%Y-%m-%d %H:%M:%S'),  # Timestamp
+            data.get('name', ''),
+            data.get('email', ''),
+            data.get('service_type', ''),
+            data.get('phone', ''),
+            data.get('address', ''),
+            data.get('lot_size', ''),
+            str(data.get('price', '')),
+            '',  # Charged Date (will be filled later)
+            data.get('start_date', '')  # Start Date
+        ]
+        
+        logger.info(f"Prepared row data: {row}")
+        
+        # First, get the current number of rows
+        result = service.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range='A:J'
+        ).execute()
+        values = result.get('values', [])
+        current_row = len(values) + 1
+
+        # If this is the first row, add headers
+        if current_row == 1:
+            headers = [
+                'Timestamp',
+                'Customer Name',
+                'Email',
+                'Service Type',
+                'Phone Number',
+                'Address',
+                'Lot Size',
+                'Price ($)',
+                'Charged Date',
+                'Start Date'
+            ]
+            body = {
+                'values': [headers]
+            }
+            service.spreadsheets().values().append(
+                spreadsheetId=SPREADSHEET_ID,
+                range='A1:J1',
+                valueInputOption='USER_ENTERED',
+                insertDataOption='INSERT_ROWS',
+                body=body
+            ).execute()
+            current_row = 2
+
+        # Append the new row
+        body = {
+            'values': [row]
+        }
+        append_result = service.spreadsheets().values().append(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f'A{current_row}:J{current_row}',
+            valueInputOption='USER_ENTERED',
+            insertDataOption='INSERT_ROWS',
+            body=body
+        ).execute()
+        
+        logger.info(f"Append result: {append_result}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error in append_to_sheet: {str(e)}")
+        return False
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 8080))

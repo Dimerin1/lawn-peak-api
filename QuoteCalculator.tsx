@@ -78,17 +78,17 @@ const selectStyle = {
     }
 }
 
-const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, handlePayment }) => {
+const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, handlePayment, referralDiscount }) => {
     const isRecurring = serviceType !== 'ONE_TIME'
     
     const getServiceBadge = () => {
         switch(serviceType) {
             case 'ONE_TIME':
-                return { text: 'Quick Service', color: '#FF9800' }
+                return { text: 'Quick Service', color: '#8E44AD' }
             case 'WEEKLY':
-                return { text: 'Best Value', color: '#4CAF50' }
+                return { text: 'Best Value', color: '#34C759' }
             case 'BI_WEEKLY':
-                return { text: 'Most Popular', color: '#4CAF50' }
+                return { text: 'Most Popular', color: '#34C759' }
             case 'MONTHLY':
                 return { text: 'Flexible Service', color: '#2196F3' }
             default:
@@ -99,9 +99,9 @@ const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, 
     const getComparisonHint = () => {
         switch(serviceType) {
             case 'ONE_TIME':
-                return { text: 'Switch to weekly and save 20%', color: '#4CAF50' }
+                return { text: 'Switch to weekly and save 20%', color: '#34C759' }
             case 'MONTHLY':
-                return { text: 'Switch to bi-weekly and save 10%', color: '#4CAF50' }
+                return { text: 'Switch to bi-weekly and save 10%', color: '#34C759' }
             default:
                 return null
         }
@@ -117,18 +117,27 @@ const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, 
             borderRadius: '20px',
             boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
             fontFamily: 'Be Vietnam Pro',
-            marginBottom: '16px', // Add margin to prevent shadow cutoff
+            marginBottom: '16px',
+            position: 'relative',
+            overflow: 'hidden'
         }}>
             {badge && (
                 <div style={{ 
-                    backgroundColor: badge.color, 
-                    color: 'white', 
-                    padding: '6px 12px', 
-                    borderRadius: '6px', 
-                    fontSize: '14px',
-                    display: 'inline-block',
-                    marginBottom: '16px',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    backgroundColor: badge.color,
+                    color: 'white',
+                    padding: '6px 30px',
+                    fontSize: '13px',
                     fontFamily: 'Be Vietnam Pro',
+                    transform: 'rotate(0deg)',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                    zIndex: 1,
+                    textAlign: 'center',
+                    fontWeight: '500',
+                    borderTopLeftRadius: '20px',
+                    borderBottomRightRadius: '12px'
                 }}>
                     {badge.text}
                 </div>
@@ -136,15 +145,20 @@ const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, 
             
             <div style={{ 
                 marginBottom: '24px',
-                textAlign: 'center'
+                textAlign: 'center',
+                position: 'relative',
+                zIndex: 2,
+                marginTop: '32px'
             }}>
                 {isRecurring ? (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-                        <span style={{ textDecoration: 'line-through', color: '#666', fontSize: '24px', fontFamily: 'Be Vietnam Pro' }}>${originalPrice}</span>
+                        {(serviceType === 'WEEKLY' || serviceType === 'BI_WEEKLY') && (
+                            <span style={{ textDecoration: 'line-through', color: '#666', fontSize: '24px', fontFamily: 'Be Vietnam Pro' }}>${originalPrice}</span>
+                        )}
                         <span style={{ fontSize: '36px', fontWeight: '600', color: '#333', fontFamily: 'Be Vietnam Pro' }}>${price}</span>
                         {(serviceType === 'WEEKLY' || serviceType === 'BI_WEEKLY') && (
                             <span style={{ 
-                                backgroundColor: '#4CAF50', 
+                                backgroundColor: '#34C759', 
                                 color: 'white', 
                                 padding: '4px 8px', 
                                 borderRadius: '6px', 
@@ -154,6 +168,18 @@ const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, 
                                 Save {serviceType === 'WEEKLY' ? '20%' : '10%'}
                             </span>
                         )}
+                        {referralDiscount > 0 && (
+                            <span style={{ 
+                                backgroundColor: '#34C759', 
+                                color: 'white', 
+                                padding: '4px 8px', 
+                                borderRadius: '6px', 
+                                fontSize: '14px',
+                                fontFamily: 'Be Vietnam Pro',
+                            }}>
+                                Save {referralDiscount * 100}%
+                            </span>
+                        )}
                     </div>
                 ) : (
                     <div style={{ fontSize: '36px', fontWeight: '600', color: '#333', fontFamily: 'Be Vietnam Pro' }}>
@@ -161,6 +187,22 @@ const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, 
                     </div>
                 )}
             </div>
+
+            {(serviceType === 'MONTHLY' || serviceType === 'ONE_TIME') && (
+                <div style={{ 
+                    fontSize: '14px', 
+                    color: '#34C759', 
+                    textAlign: 'center',
+                    fontWeight: '500',
+                    marginBottom: '24px',
+                    fontFamily: 'Be Vietnam Pro',
+                }}>
+                    {serviceType === 'MONTHLY' 
+                        ? 'Switch to bi-weekly and save 10%'
+                        : 'Switch to weekly and save 20%'
+                    }
+                </div>
+            )}
 
             <div style={{ 
                 fontSize: '14px', 
@@ -178,18 +220,16 @@ const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, 
                 <div style={{ marginBottom: '8px' }}>✓ Grass clippings cleanup</div>
             </div>
 
-            {hint && (
-                <div style={{ 
-                    fontSize: '14px', 
-                    color: hint.color, 
-                    textAlign: 'center',
-                    fontWeight: '500',
-                    marginBottom: '24px',
-                    fontFamily: 'Be Vietnam Pro',
-                }}>
-                    {hint.text}
-                </div>
-            )}
+            <div style={{ 
+                fontSize: '14px', 
+                color: '#666', 
+                textAlign: 'center',
+                marginBottom: '24px',
+                fontFamily: 'Be Vietnam Pro',
+                fontStyle: 'italic'
+            }}>
+                You will only be charged after the service is completed
+            </div>
 
             <button
                 className="add-payment-button"
@@ -249,7 +289,8 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         service: "",
         phone: "",
         price: 0,
-        showPrice: false
+        showPrice: false,
+        startDate: ""
     });
 
     const [priceDisplay, setPriceDisplay] = React.useState("")
@@ -261,9 +302,9 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
     const [showCalendar, setShowCalendar] = React.useState(false)
     const [stripePublishableKey, setStripePublishableKey] = React.useState("");
     const [selectedDate, setSelectedDate] = React.useState(() => {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        return tomorrow;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return today;
     });
     const [currentStep, setCurrentStep] = React.useState(1);
     const [showRequiredError, setShowRequiredError] = React.useState(false);
@@ -271,8 +312,33 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         address: false,
         lotSize: false,
         service: false,
-        phone: false
+        phone: false,
+        startDate: false
     });
+
+    const [referralCode, setReferralCode] = React.useState("");
+    const [referralError, setReferralError] = React.useState("");
+    const [referralDiscount, setReferralDiscount] = React.useState(0);
+    const [isValidatingReferral, setIsValidatingReferral] = React.useState(false);
+
+    const calendarRef = React.useRef(null);
+
+    const handleClickOutside = React.useCallback((event: MouseEvent) => {
+        if (calendarRef.current && !calendarRef.current.contains(event.target as Node)) {
+            setShowCalendar(false);
+        }
+    }, []);
+
+    React.useEffect(() => {
+        if (showCalendar) {
+            document.addEventListener('mousedown', handleClickOutside);
+        } else {
+            document.removeEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showCalendar, handleClickOutside]);
 
     React.useEffect(() => {
         // Fetch Stripe publishable key from backend
@@ -288,34 +354,67 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
     }, []);
 
     const formatDateForDisplay = (date) => {
-        const month = date.toLocaleString('en-US', { month: 'short' });
-        const day = date.getDate();
-        const year = date.getFullYear();
-        return `${month} ${day}, ${year}`;
+        if (!date) return '';
+        const options = { month: 'short', day: 'numeric', year: 'numeric' };
+        return date.toLocaleDateString('en-US', options);
     };
 
-    const handleDateSelect = (day) => {
-        const date = new Date(2024, 11, day);
-        setSelectedDate(date);
+    const handleDateSelect = (date: Date) => {
+        const formattedDate = date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
         setFormData(prev => ({
             ...prev,
-            startDate: formatDateForDisplay(date)
+            startDate: formattedDate
         }));
         setShowCalendar(false);
     };
 
-    const handleAddressSelect = (address) => {
-        setFormData(prev => ({
-            ...prev,
-            address: address
-        }));
+    const generateCalendarDays = (year, month) => {
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const days = [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Add empty cells for days before the first of the month
+        for (let i = 0; i < firstDay.getDay(); i++) {
+            days.push(null);
+        }
+
+        // Add the days of the month
+        for (let i = 1; i <= lastDay.getDate(); i++) {
+            const date = new Date(year, month, i);
+            days.push({
+                date,
+                isDisabled: date < today,
+                isToday: date.getTime() === today.getTime(),
+                isSelected: selectedDate && date.getTime() === selectedDate.getTime()
+            });
+        }
+
+        return days;
     };
 
-    const handleInputChange = (field, value) => {
-        setFormData(prev => ({
-            ...prev,
-            [field]: value
-        }));
+    const [currentMonth, setCurrentMonth] = React.useState(() => {
+        const today = new Date();
+        return {
+            month: today.getMonth(),
+            year: today.getFullYear()
+        };
+    });
+
+    const navigateMonth = (direction) => {
+        setCurrentMonth(prev => {
+            const newMonth = prev.month + direction;
+            const newYear = prev.year + Math.floor(newMonth / 12);
+            return {
+                month: (newMonth + 12) % 12,
+                year: newYear
+            };
+        });
     };
 
     const calculatePrice = (lotSize: string, service: string) => {
@@ -375,7 +474,8 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 service_type: service,
                 lot_size: lotSize,
                 address: formData.address,
-                phone: formData.phone
+                phone: formData.phone,
+                start_date: formData.startDate || 'Not provided'
             }
             
             localStorage.setItem('quoteData', JSON.stringify(quoteData))
@@ -397,86 +497,31 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         }
     };
 
-    const handlePayment = async () => {
-        // Update field errors
-        const errors = {
-            address: !formData.address,
-            lotSize: !formData.lotSize,
-            service: !formData.service,
-            phone: !formData.phone || formData.phone.length < 10 // Basic phone validation
-        };
-        setFieldErrors(errors);
+    const handleDateChange = (date) => {
+        setSelectedDate(date);
+        setFormData(prev => ({
+            ...prev,
+            startDate: formatDateForDisplay(date)
+        }));
+    };
 
-        if (Object.values(errors).some(error => error)) {
-            return;
-        }
+    const handleAddressSelect = (address) => {
+        setFormData(prev => ({
+            ...prev,
+            address: address
+        }));
+    };
 
-        setIsProcessingPayment(true);
-        setPaymentError(null);
+    const handleInputChange = (field, value) => {
+        setFormData(prev => ({
+            ...prev,
+            [field]: value
+        }));
+    };
 
-        try {
-            const baseUrl = window.location.href.split('?')[0];
-            const successUrl = `${baseUrl}?setup=success`;
-            const cancelUrl = `${baseUrl}?setup=canceled`;
-
-            const requestData = {
-                price: formData.price,
-                service_type: formData.service,
-                address: formData.address,
-                lot_size: formData.lotSize,
-                phone: formData.phone,
-                success_url: successUrl,
-                cancel_url: cancelUrl
-            };
-
-            console.log('Creating setup intent with data:', requestData);
-
-            // Use environment-based API URL
-            const apiUrl = window.location.hostname === 'localhost'
-                ? 'http://localhost:8080/create-setup-intent'
-                : 'https://lawn-peak-api.onrender.com/create-setup-intent';
-
-            console.log('Sending request to:', apiUrl);
-
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                },
-                mode: 'cors',
-                credentials: 'omit',
-                body: JSON.stringify(requestData)
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.error('Server response:', errorData);
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            
-            if (data.error) {
-                throw new Error(data.error);
-            }
-
-            if (!data.setupIntentUrl) {
-                throw new Error('No setup URL returned from server');
-            }
-
-            // Save form data to localStorage before redirect
-            localStorage.setItem('quoteFormData', JSON.stringify(formData));
-
-            // Redirect to Stripe Checkout
-            window.location.href = data.setupIntentUrl;
-
-        } catch (error) {
-            console.error('Payment error:', error);
-            setPaymentError(error.message || 'An error occurred while setting up payment. Please try again.');
-        } finally {
-            setIsProcessingPayment(false);
-        }
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = formatPhoneNumber(e.target.value);
+        handleInputChange('phone', value);
     };
 
     const formatPhoneNumber = (value: string) => {
@@ -503,20 +548,167 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         return formatted;
     };
 
-    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = formatPhoneNumber(e.target.value);
-        handleInputChange('phone', value);
-    };
-
     const isFormValid = () => {
         return !!(
             formData.address &&
             formData.lotSize &&
             formData.service &&
             formData.phone &&
-            formData.phone.length >= 10 // Basic phone validation
+            formData.phone.length >= 10 &&
+            formData.startDate
         );
     };
+
+    const handlePayment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsProcessingPayment(true);
+        setPaymentError(null);
+
+        try {
+            const errors = {
+                address: !formData.address,
+                lotSize: !formData.lotSize,
+                service: !formData.service,
+                phone: !formData.phone || formData.phone.length < 10,
+                startDate: !formData.startDate
+            };
+            setFieldErrors(errors);
+
+            if (!isFormValid()) {
+                setIsProcessingPayment(false);
+                return;
+            }
+
+            const baseUrl = window.location.href.split('?')[0];
+            const successUrl = `${baseUrl}?setup=success`;
+            const cancelUrl = `${baseUrl}?setup=canceled`;
+
+            // Prepare data for both requests
+            const quoteData = {
+                name: formData.name || 'Not provided',
+                email: formData.email || 'Not provided',
+                phone: formData.phone,
+                address: formData.address,
+                lot_size: formData.lotSize,
+                service_type: formData.service,
+                price: formData.price,
+                start_date: formData.startDate
+            };
+
+            // Send quote data to Google Sheets
+            const apiBaseUrl = window.location.hostname === 'localhost'
+                ? 'http://localhost:8080'
+                : 'https://lawn-peak-api.onrender.com';
+
+            const quoteResponse = await fetch(`${apiBaseUrl}/submit-quote`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
+                mode: 'cors',
+                credentials: 'omit',
+                body: JSON.stringify(quoteData)
+            });
+
+            if (!quoteResponse.ok) {
+                console.error('Error submitting quote:', await quoteResponse.text());
+            }
+
+            // Proceed with setup intent
+            const setupIntentResponse = await fetch(`${apiBaseUrl}/create-setup-intent`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
+                mode: 'cors',
+                credentials: 'omit',
+                body: JSON.stringify({
+                    price: formData.price,
+                    address: formData.address,
+                    service_type: formData.service,
+                    lot_size: formData.lotSize,
+                    phone: formData.phone,
+                    start_date: formData.startDate,
+                    success_url: successUrl,
+                    cancel_url: cancelUrl,
+                    referral_code: referralCode || null
+                })
+            });
+
+            if (!setupIntentResponse.ok) {
+                const errorData = await setupIntentResponse.json();
+                console.error('Server response:', errorData);
+                throw new Error(errorData.error || `HTTP error! status: ${setupIntentResponse.status}`);
+            }
+
+            const data = await setupIntentResponse.json();
+            
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            if (!data.setupIntentUrl) {
+                throw new Error('No setup URL returned from server');
+            }
+
+            // Save form data to localStorage before redirect
+            localStorage.setItem('quoteFormData', JSON.stringify(formData));
+
+            // Redirect to Stripe Checkout
+            window.location.href = data.setupIntentUrl;
+
+        } catch (error) {
+            console.error('Payment error:', error);
+            setPaymentError(error.message || 'An error occurred while setting up payment. Please try again.');
+        } finally {
+            setIsProcessingPayment(false);
+        }
+    };
+
+    const shouldShowCalendarInput = formData.service && formData.lotSize;
+
+    const validateReferralCode = async () => {
+        if (!referralCode) {
+            setReferralError("");
+            setReferralDiscount(0);
+            return;
+        }
+
+        setIsValidatingReferral(true);
+        try {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/referral/validate`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    code: referralCode,
+                    referee_email: formData.email || 'Not provided'
+                })
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                setReferralError("");
+                setReferralDiscount(data.discount);
+                // Update final price with discount
+                const discountedPrice = formData.price * (1 - data.discount);
+                setFormData(prev => ({ ...prev, price: discountedPrice }));
+            } else {
+                setReferralError(data.error);
+                setReferralDiscount(0);
+            }
+        } catch (error) {
+            setReferralError("Failed to validate referral code");
+            setReferralDiscount(0);
+        } finally {
+            setIsValidatingReferral(false);
+        }
+    };
+
+    const isReferralSystemEnabled = process.env.NEXT_PUBLIC_ENABLE_REFERRAL_SYSTEM === 'true';
 
     return (
         <div style={{
@@ -547,26 +739,166 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 ))}
             </select>
 
-            <select
+            <select 
                 value={formData.service}
                 onChange={handleServiceChange}
-                style={selectStyle}
+                style={getInputStyle(fieldErrors.service)}
             >
-                <option value="">Select service</option>
+                <option value="" disabled selected>Select your service</option>
                 {serviceTypes.map(option => (
-                    <option key={option.value} value={option.value}>
-                        {option.label}
-                    </option>
+                    <option value={option.value}>{option.label}</option>
                 ))}
             </select>
+            {fieldErrors.service && (
+                <div style={errorStyle}>
+                    Please select a service type
+                </div>
+            )}
+
+            {shouldShowCalendarInput && (
+                <div style={{ marginBottom: '20px', position: 'relative' }}>
+                    <div
+                        onClick={() => setShowCalendar(!showCalendar)}
+                        style={{
+                            ...getInputStyle(fieldErrors.startDate),
+                            display: 'flex',
+                            alignItems: 'center',
+                            cursor: 'pointer',
+                            padding: '8px 12px',
+                            color: formData.startDate ? '#333333' : '#666666'
+                        }}
+                    >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ marginRight: '12px' }}>
+                            <path d="M19 4H5C3.89543 4 3 4.89543 3 6V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V6C21 4.89543 20.1046 4 19 4Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M16 2V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M8 2V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M3 10H21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        {formData.startDate || "Pick preferred date"}
+                    </div>
+                    {showCalendar && (
+                        <div 
+                            ref={calendarRef}
+                            style={{
+                                position: 'absolute',
+                                top: '100%',
+                                left: 0,
+                                right: 0,
+                                backgroundColor: 'white',
+                                borderRadius: '12px',
+                                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                                padding: '16px',
+                                zIndex: 1000,
+                                marginTop: '8px',
+                                minWidth: '300px'
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginBottom: '16px'
+                            }}>
+                                <button onClick={() => navigateMonth(-1)} style={{
+                                    border: 'none',
+                                    background: 'none',
+                                    cursor: 'pointer',
+                                    padding: '8px'
+                                }}>&lt;</button>
+                                <span style={{ fontWeight: 500 }}>
+                                    {new Date(currentMonth.year, currentMonth.month).toLocaleString('en-US', { month: 'long', year: 'numeric' })}
+                                </span>
+                                <button onClick={() => navigateMonth(1)} style={{
+                                    border: 'none',
+                                    background: 'none',
+                                    cursor: 'pointer',
+                                    padding: '8px'
+                                }}>&gt;</button>
+                            </div>
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(7, 1fr)',
+                                gap: '4px',
+                                textAlign: 'center'
+                            }}>
+                                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
+                                    <div key={day} style={{ 
+                                        padding: '4px',
+                                        fontSize: '12px',
+                                        color: '#666666'
+                                    }}>{day}</div>
+                                ))}
+                                {generateCalendarDays(currentMonth.year, currentMonth.month).map((day, index) => (
+                                    <div
+                                        key={index}
+                                        onClick={() => day && !day.isDisabled && handleDateSelect(day.date)}
+                                        style={{
+                                            padding: '8px 4px',
+                                            cursor: day?.isDisabled ? 'default' : 'pointer',
+                                            backgroundColor: day?.isSelected ? '#4CAF50' : 'transparent',
+                                            color: day?.isDisabled ? '#999' : day?.isSelected ? 'white' : '#333',
+                                            borderRadius: '4px',
+                                            fontSize: '14px'
+                                        }}
+                                    >
+                                        {day?.date.getDate()}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    {fieldErrors.startDate && (
+                        <div style={errorStyle}>
+                            Please select a preferred date
+                        </div>
+                    )}
+                </div>
+            )}
 
             <input
                 type="tel"
                 value={formData.phone}
                 onChange={handlePhoneChange}
+                style={getInputStyle(fieldErrors.phone)}
                 placeholder="Phone number"
-                style={inputStyle}
             />
+            {isReferralSystemEnabled && (
+                <div style={{ marginBottom: "16px" }}>
+                    <label style={errorStyle}>Referral Code (Optional)</label>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                        <input
+                            type="text"
+                            value={referralCode}
+                            onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                            onBlur={validateReferralCode}
+                            style={{
+                                ...inputStyle,
+                                flex: 1,
+                                textTransform: "uppercase"
+                            }}
+                            placeholder="Enter referral code"
+                        />
+                        {isValidatingReferral && (
+                            <div style={{ display: "flex", alignItems: "center", padding: "0 12px" }}>
+                                <motion.div
+                                    animate={{ rotate: 360 }}
+                                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                                >
+                                    ⟳
+                                </motion.div>
+                            </div>
+                        )}
+                    </div>
+                    {referralError && <div style={errorStyle}>{referralError}</div>}
+                    {referralDiscount > 0 && (
+                        <div style={{ ...errorStyle, marginTop: "4px", color: "#34C759" }}>
+                            {referralDiscount * 100}% discount applied!
+                        </div>
+                    )}
+                </div>
+            )}
+
             {isLoading ? (
                 <div style={{
                     textAlign: "center",
@@ -581,6 +913,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     originalPrice={calculatePrice(formData.lotSize, 'ONE_TIME')} 
                     isProcessingPayment={isProcessingPayment}
                     handlePayment={handlePayment}
+                    referralDiscount={referralDiscount}
                 />
             )}
 
@@ -594,7 +927,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     .not-charged-message {
                         font-size: 15px;
                         font-weight: 500;
-                        color: #4CAF50;
+                        color: #34C759;
                         margin-bottom: 20px;
                         padding: 10px 20px;
                         background-color: rgba(76, 175, 80, 0.1);
@@ -612,7 +945,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                         animation: fadeIn 0.5s ease-out;
                         transition: all 0.3s ease;
                         position: relative;
-                        overflow: hidden;
+                        overflow: 'visible';
                         margin: 8px 0;
                         text-align: center;
                         border: 1px solid rgba(0, 0, 0, 0.05);
@@ -654,7 +987,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     }
                     
                     .savings-badge {
-                        background-color: #4CAF50;
+                        background-color: #34C759;
                         color: white;
                         padding: 4px 8px;
                         border-radius: 4px;
@@ -715,7 +1048,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     .trust-message svg {
                         width: 14px;
                         height: 14px;
-                        color: #4CAF50;
+                        color: #34C759;
                     }
 
                     input::placeholder,
@@ -791,7 +1124,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     }
 
                     .savings-badge {
-                        background-color: #4CAF50;
+                        background-color: #34C759;
                         color: white;
                         padding: 4px 8px;
                         border-radius: 4px;
@@ -895,7 +1228,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     }
 
                     .calendar-day.selected {
-                        background-color: #4CAF50;
+                        background-color: #34C759;
                         color: white;
                     }
 
