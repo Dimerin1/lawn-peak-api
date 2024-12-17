@@ -16,13 +16,13 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-# Initialize Stripe with the live key
+# Initialize Stripe with the key from environment
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 if not stripe.api_key:
     logger.error("STRIPE_SECRET_KEY environment variable is not set")
 else:
-    logger.info(f"Stripe API key loaded (length: {len(stripe.api_key)})")
-    logger.info("Stripe API configured for live mode")
+    logger.info(f"Stripe API key loaded: {stripe.api_key[:10]}...")
+    logger.info(f"Using {'test' if 'test' in stripe.api_key else 'live'} mode")
 
 # Initialize Google Services
 GOOGLE_SERVICES_AVAILABLE = True
@@ -43,7 +43,7 @@ logger.info("Flask app created")
 # Configure CORS
 CORS(app, 
      resources={r"/*": {
-         "origins": ["https://lawnpeak.com", "http://localhost:3000"],
+         "origins": ["https://lawnpeak.com"],  # Production only
          "methods": ["GET", "POST", "OPTIONS"],
          "allow_headers": ["Content-Type", "Authorization", "Origin"],
          "expose_headers": ["Content-Type"],
@@ -56,10 +56,7 @@ CORS(app,
 def handle_preflight():
     if request.method == "OPTIONS":
         response = make_response()
-        if request.headers.get('Origin') == 'https://lawnpeak.com':
-            response.headers.add('Access-Control-Allow-Origin', 'https://lawnpeak.com')
-        else:
-            response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Origin', 'https://lawnpeak.com')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Origin')
         response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
         response.headers.add('Access-Control-Max-Age', '3600')
@@ -67,10 +64,7 @@ def handle_preflight():
 
 @app.after_request
 def after_request(response):
-    if request.headers.get('Origin') == 'https://lawnpeak.com':
-        response.headers['Access-Control-Allow-Origin'] = 'https://lawnpeak.com'
-    else:
-        response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Origin'] = 'https://lawnpeak.com'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Origin'
     response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
     response.headers['Access-Control-Max-Age'] = '3600'
@@ -225,6 +219,25 @@ def debug():
         'stripe_key_last_4': stripe.api_key[-4:] if stripe.api_key else None
     })
 
+@app.route('/debug/stripe', methods=['GET'])
+def debug_stripe():
+    try:
+        # Test the Stripe connection
+        account = stripe.Account.retrieve()
+        return jsonify({
+            'status': 'ok',
+            'stripe_mode': 'test' if 'test' in stripe.api_key else 'live',
+            'account_id': account.id,
+            'charges_enabled': account.charges_enabled,
+            'details_submitted': account.details_submitted
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'stripe_key_prefix': stripe.api_key[:10] if stripe.api_key else None
+        }), 400
+
 @app.route('/create-checkout-session', methods=['POST'])
 def create_checkout_session():
     try:
@@ -346,18 +359,11 @@ def create_setup_intent():
             mode='setup',
             success_url=data.get('success_url', request.host_url),
             cancel_url=data.get('cancel_url', request.host_url),
-            payment_method_options={
-                'card': {
-                    'setup_future_usage': 'off_session'
-                }
-            },
-            consent_collection={
-                'terms_of_service': 'none'
-            },
-            custom_text={
-                'submit': {
-                    'message': 'By adding your card, you agree to be charged after the service is completed.'
-                }
+            metadata={
+                'service_type': data.get('service_type'),
+                'address': data.get('address'),
+                'lot_size': data.get('lot_size'),
+                'phone': data.get('phone')
             }
         )
         logger.info(f"Created session: {session.id}")

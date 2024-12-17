@@ -1,5 +1,5 @@
 import * as React from "react"
-import { addPropertyControls, ControlType } from "framer"
+import { motion } from "framer-motion"
 
 // Service configuration
 const SERVICES = {
@@ -409,9 +409,8 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
 
             console.log('Creating setup intent with data:', requestData);
 
-            // Use the API URL from environment variable
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://lawn-peak-api.onrender.com';
-            const response = await fetch(`${apiUrl}/create-setup-intent`, {
+            // Use production API URL
+            const response = await fetch('https://lawn-peak-api.onrender.com/create-setup-intent', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -917,15 +916,6 @@ QuoteCalculator.defaultProps = {
     onPriceChange: () => {},
     onServiceChange: () => {}
 }
-
-addPropertyControls(QuoteCalculator, {
-    onPriceChange: {
-        type: ControlType.EventHandler
-    },
-    onServiceChange: {
-        type: ControlType.EventHandler
-    }
-})
 
 const loadGoogleMapsScript = () => {
     return new Promise((resolve, reject) => {

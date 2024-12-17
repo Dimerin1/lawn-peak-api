@@ -1,12 +1,9 @@
-import { useRouter } from 'next/router'
-import { useEffect } from 'react'
+import QuoteCalculator from '../QuoteCalculator'
 
 export default function Home() {
-  const router = useRouter()
-  
-  useEffect(() => {
-    router.push('/admin')
-  }, [])
-  
-  return null
+  return (
+    <div>
+      <QuoteCalculator />
+    </div>
+  )
 }

@@ -10,14 +10,15 @@
   "dependencies": {
     "@stripe/react-stripe-js": "^2.4.0",
     "@stripe/stripe-js": "^2.2.0",
-    "next": "^14.0.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "@types/google.maps": "^3.54.10",
     "@types/node": "^20.17.10",
     "@types/react": "^18.3.16",
     "@types/react-dom": "^18.3.5",
-    "typescript": "^5.7.2",
-    "@types/google.maps": "^3.54.10",
-    "axios": "^1.6.2"
+    "axios": "^1.6.2",
+    "framer-motion": "^11.15.0",
+    "next": "^14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.7.2"
   }
 }
