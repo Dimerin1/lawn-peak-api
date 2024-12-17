@@ -23,6 +23,18 @@ if not stripe.api_key:
 else:
     logger.info(f"Stripe API key loaded (length: {len(stripe.api_key)})")
 
+# Initialize Google Services
+GOOGLE_SERVICES_AVAILABLE = True
+try:
+    credentials = service_account.Credentials.from_service_account_file(
+        'google-credentials.json',
+        scopes=['https://www.googleapis.com/auth/places']
+    )
+    logger.info("Google credentials loaded successfully")
+except Exception as e:
+    GOOGLE_SERVICES_AVAILABLE = False
+    logger.error(f"Failed to load Google credentials: {str(e)}")
+
 # Create Flask app
 app = Flask(__name__)
 logger.info("Flask app created")
@@ -179,56 +191,44 @@ def create_setup_intent():
             return response
 
         data = request.json
-        print("Received setup intent request with data:", data)
-        return_url = data.get('return_url')
-        quote_data = data.get('quoteData', {})
-        is_test_mode = data.get('test_mode', True)  # Default to test mode for safety
+        logger.info("Received setup intent request with data: %s", data)
+        quote_data = data
         
-        if not return_url:
-            print("Error: Return URL is required")
-            return jsonify({'error': 'Return URL is required'}), 400
-
         # Create a Customer
-        print("Creating Stripe customer with metadata:", {
-            'service_type': quote_data.get('service'),
+        logger.info("Creating Stripe customer with metadata: %s", {
+            'service_type': quote_data.get('service_type'),
             'address': quote_data.get('address'),
-            'lot_size': quote_data.get('lotSize'),
+            'lot_size': quote_data.get('lot_size'),
             'phone': quote_data.get('phone'),
             'price': str(quote_data.get('price', '0'))
         })
         
         customer = stripe.Customer.create(
             metadata={
-                'service_type': quote_data.get('service'),
+                'service_type': quote_data.get('service_type'),
                 'address': quote_data.get('address'),
-                'lot_size': quote_data.get('lotSize'),
+                'lot_size': quote_data.get('lot_size'),
                 'phone': quote_data.get('phone'),
                 'price': str(quote_data.get('price', '0'))
             }
         )
-        print("Created Stripe customer:", customer.id)
-        
-        # In test mode, we'll use a fixed success_url to avoid the {CUSTOMER_ID} placeholder issue
-        success_url = (
-            return_url + '?setup=success&customer_id=' + 
-            ('test_customer' if is_test_mode else '{CUSTOMER_ID}')
-        )
+        logger.info("Created Stripe customer: %s", customer.id)
         
         # Create a Stripe Checkout Session for setup only
-        print("Creating Stripe checkout session for customer:", customer.id)
+        logger.info("Creating Stripe checkout session for customer: %s", customer.id)
         session = stripe.checkout.Session.create(
             mode='setup',
             customer=customer.id,
             payment_method_types=['card'],
             metadata={
-                'service_type': quote_data.get('service'),
+                'service_type': quote_data.get('service_type'),
                 'address': quote_data.get('address'),
-                'lot_size': quote_data.get('lotSize'),
+                'lot_size': quote_data.get('lot_size'),
                 'phone': quote_data.get('phone'),
                 'price': str(quote_data.get('price', '0'))
             },
-            success_url=success_url,
-            cancel_url=return_url + '?setup=canceled',
+            success_url=quote_data.get('success_url', 'https://lawn-peak.framer.website/quote-calculator?setup=success'),
+            cancel_url=quote_data.get('cancel_url', 'https://lawn-peak.framer.website/quote-calculator?setup=canceled'),
             payment_intent_data=None,  # Ensure no payment intent is created
             consent_collection={
                 'terms_of_service': 'none',  # Don't show terms of service
@@ -239,9 +239,8 @@ def create_setup_intent():
                 }
             }
         )
-        print("Created Stripe checkout session:", session.id)
-        print("Session URL:", session.url)
-        print("Success URL:", success_url)
+        logger.info("Created Stripe checkout session: %s", session.id)
+        logger.info("Session URL: %s", session.url)
         
         response = jsonify({
             'setupIntentUrl': session.url
@@ -253,7 +252,7 @@ def create_setup_intent():
         return response
 
     except Exception as e:
-        print('Error creating setup intent:', str(e))
+        logger.error('Error creating setup intent: %s', str(e))
         error_response = jsonify({'error': str(e)})
         error_response.headers.add('Access-Control-Allow-Origin', '*')
         error_response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
@@ -405,15 +404,15 @@ def webhook():
     return jsonify({'status': 'success'})
 
 @app.route('/api/lot-size', methods=['POST'])
-def get_lot_size_endpoint():
+def lot_size_endpoint():
     try:
         data = request.json
-        address = data.get('address')
-        
-        if not address:
+        if not data or 'address' not in data:
             return jsonify({'error': 'Address is required'}), 400
             
+        address = data['address']
         lot_size = get_lot_size(address)
+        
         if lot_size is None:
             return jsonify({'error': 'Could not determine lot size'}), 400
             
@@ -423,7 +422,7 @@ def get_lot_size_endpoint():
         })
         
     except Exception as e:
-        print('Error getting lot size:', str(e))
+        logger.error(f'Error in lot_size_endpoint: {str(e)}')
         return jsonify({'error': str(e)}), 500
 
 @app.route('/test-stripe')
@@ -1111,41 +1110,21 @@ def calculate_price(lot_size_range, service_type='ONE_TIME'):
     final_price = base_price * (1 - discount)
     return round(final_price / 5) * 5
 
+def get_lot_size(address):
+    """
+    Determine lot size category based on address.
+    Returns one of: SMALL, MEDIUM, LARGE, XLARGE
+    """
+    try:
+        # For now, return a default category
+        # In production, this would use Google Maps API to get actual lot size
+        return "MEDIUM"
+        
+    except Exception as e:
+        logger.error(f'Error in get_lot_size: {str(e)}')
+        return None
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 8080))
     logger.info(f"Starting app on port {port}")
     app.run(host='0.0.0.0', port=port)
-
-def get_lot_size(address):
-    if not GOOGLE_SERVICES_AVAILABLE:
-        return None
-        
-    try:
-        # Initialize the Maps API client
-        credentials = service_account.Credentials.from_service_account_file(
-            'google-credentials.json',
-            scopes=['https://www.googleapis.com/auth/places']
-        )
-        maps_client = build('places', 'v1', credentials=credentials)
-        
-        # Get place details
-        place_result = maps_client.places().findPlaceFromText(
-            input_=address,
-            inputtype='textquery',
-            fields=['place_id', 'geometry']
-        ).execute()
-        
-        if not place_result.get('candidates'):
-            return None
-            
-        place = place_result['candidates'][0]
-        location = place['geometry']['location']
-        
-        # Use the location to estimate lot size
-        # This is a simplified example - you'd need to implement actual lot size calculation
-        # based on property boundaries
-        return '5000'  # Return a default value for now
-        
-    except Exception as e:
-        print('Error in get_lot_size:', str(e))
-        return None
