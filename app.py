@@ -16,15 +16,13 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-# Initialize Stripe
+# Initialize Stripe with the live key
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 if not stripe.api_key:
     logger.error("STRIPE_SECRET_KEY environment variable is not set")
 else:
     logger.info(f"Stripe API key loaded (length: {len(stripe.api_key)})")
     # Force live mode
-    stripe.api_version = '2023-10-16'  # Use latest API version
-    stripe.api_key = stripe.api_key.replace('sk_test_', 'sk_live_')
     logger.info("Stripe API configured for live mode")
 
 # Initialize Google Services
@@ -186,81 +184,43 @@ def create_payment_intent():
 @app.route('/create-setup-intent', methods=['POST'])
 def create_setup_intent():
     try:
-        # Add CORS headers for preflight
-        if request.method == 'OPTIONS':
-            response = make_response()
-            response.headers.add('Access-Control-Allow-Origin', '*')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-            response.headers.add('Access-Control-Allow-Methods', 'POST')
-            return response
+        data = request.get_json()
+        
+        # Validate Stripe publishable key
+        stripe_publishable_key = request.headers.get('Stripe-Publishable-Key')
+        if stripe_publishable_key != os.getenv('STRIPE_PUBLISHABLE_KEY'):
+            return jsonify({'error': 'Invalid Stripe publishable key'}), 401
 
-        data = request.json
-        logger.info("Received setup intent request with data: %s", data)
-        quote_data = data
-        
-        # Create a Customer
-        logger.info("Creating Stripe customer with metadata: %s", {
-            'service_type': quote_data.get('service_type'),
-            'address': quote_data.get('address'),
-            'lot_size': quote_data.get('lot_size'),
-            'phone': quote_data.get('phone'),
-            'price': str(quote_data.get('price', '0'))
-        })
-        
+        # Create a new customer
         customer = stripe.Customer.create(
+            description="Customer for LawnPeak service",
             metadata={
-                'service_type': quote_data.get('service_type'),
-                'address': quote_data.get('address'),
-                'lot_size': quote_data.get('lot_size'),
-                'phone': quote_data.get('phone'),
-                'price': str(quote_data.get('price', '0'))
+                'service_type': data.get('service_type'),
+                'address': data.get('address'),
+                'lot_size': data.get('lot_size'),
+                'phone': data.get('phone')
             }
         )
-        logger.info("Created Stripe customer: %s", customer.id)
-        
-        # Create a Stripe Checkout Session for setup only
-        logger.info("Creating Stripe checkout session for customer: %s", customer.id)
+
+        # Create a checkout session
         session = stripe.checkout.Session.create(
-            mode='setup',
             customer=customer.id,
             payment_method_types=['card'],
-            metadata={
-                'service_type': quote_data.get('service_type'),
-                'address': quote_data.get('address'),
-                'lot_size': quote_data.get('lot_size'),
-                'phone': quote_data.get('phone'),
-                'price': str(quote_data.get('price', '0'))
-            },
-            success_url=quote_data.get('success_url', 'https://lawn-peak.framer.website/quote-calculator?setup=success'),
-            cancel_url=quote_data.get('cancel_url', 'https://lawn-peak.framer.website/quote-calculator?setup=canceled'),
-            payment_intent_data=None,  # Ensure no payment intent is created
-            consent_collection={
-                'terms_of_service': 'none',  # Don't show terms of service
-            },
-            custom_text={
-                'submit': {
-                    'message': 'By adding your card, you agree to be charged after the service is completed. No charges will be made now.'
-                }
-            }
+            mode='setup',
+            success_url=data.get('success_url', request.host_url),
+            cancel_url=data.get('cancel_url', request.host_url)
         )
-        logger.info("Created Stripe checkout session: %s", session.id)
-        logger.info("Session URL: %s", session.url)
-        
-        response = jsonify({
+
+        return jsonify({
             'setupIntentUrl': session.url
         })
-        
-        # Add CORS headers to the actual response
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        return response
 
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe error: {str(e)}")
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
-        logger.error('Error creating setup intent: %s', str(e))
-        error_response = jsonify({'error': str(e)})
-        error_response.headers.add('Access-Control-Allow-Origin', '*')
-        error_response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        return error_response, 400
+        logger.error(f"Server error: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/charge-customer', methods=['POST', 'OPTIONS'])
 def charge_customer():
