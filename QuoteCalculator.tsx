@@ -431,19 +431,26 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
 
             console.log('Creating setup intent with data:', requestData);
 
-            // Use local API URL for development
-            const response = await fetch('http://localhost:8080/create-setup-intent', {
+            // Use environment-based API URL
+            const apiUrl = process.env.NODE_ENV === 'development' 
+                ? 'http://localhost:8080/create-setup-intent'
+                : 'https://lawn-peak-api.onrender.com/create-setup-intent';
+
+            console.log('Sending request to:', apiUrl);
+
+            const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Origin': 'http://localhost:3000'
+                    'Accept': 'application/json',
                 },
-                body: JSON.stringify(requestData),
-                credentials: 'omit'
+                mode: 'cors',
+                body: JSON.stringify(requestData)
             });
 
             if (!response.ok) {
                 const errorData = await response.json();
+                console.error('Server response:', errorData);
                 throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
             }
 

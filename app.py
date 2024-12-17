@@ -28,33 +28,54 @@ else:
     logger.info(f"Using {'test' if 'test' in stripe_key else 'live'} mode")
 
 # Initialize Google Services
-GOOGLE_SERVICES_AVAILABLE = True
+GOOGLE_SERVICES_AVAILABLE = False  # Default to False
+google_credentials = None
 try:
-    # In Render, the secret file will be in the app root
-    credentials = service_account.Credentials.from_service_account_file(
-        'google-credentials.json',
-        scopes=['https://www.googleapis.com/auth/spreadsheets']
-    )
-    logger.info("Google credentials loaded successfully")
+    credentials_path = 'google-credentials.json'
+    if os.path.exists(credentials_path):
+        google_credentials = service_account.Credentials.from_service_account_file(
+            credentials_path,
+            scopes=['https://www.googleapis.com/auth/spreadsheets']
+        )
+        GOOGLE_SERVICES_AVAILABLE = True
+        logger.info("Google credentials loaded successfully")
+    else:
+        logger.warning("Google credentials file not found - Sheets integration disabled")
 except Exception as e:
-    GOOGLE_SERVICES_AVAILABLE = False
     logger.error(f"Failed to load Google credentials: {str(e)}")
 
 # Create Flask app
 app = Flask(__name__)
-logger.info("Flask app created")
 
 # Configure CORS
 CORS(app, 
      resources={r"/*": {
-         "origins": ["http://localhost:3000", "https://lawn-peak-front.onrender.com"],  # Allow both local and production
+         "origins": "*",  # Allow all origins for now
          "methods": ["GET", "POST", "OPTIONS"],
-         "allow_headers": ["Content-Type", "Authorization", "Origin"],
+         "allow_headers": ["Content-Type", "Authorization", "Stripe-Publishable-Key", "Origin"],
          "expose_headers": ["Content-Type"],
          "supports_credentials": False,
          "max_age": 3600
      }}
 )
+
+# Add CORS preflight handler
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Stripe-Publishable-Key')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
+@app.errorhandler(Exception)
+def handle_error(error):
+    logger.error(f"Unhandled error: {str(error)}")
+    response = jsonify({
+        "error": "An internal server error occurred",
+        "details": str(error)
+    })
+    response.status_code = 500
+    return response
 
 # Admin credentials (in production, use environment variables)
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')
@@ -84,31 +105,6 @@ def admin_login():
         logger.error(f"Error in admin login: {str(e)}")
         return jsonify({'error': 'Server error'}), 500
 
-@app.before_request
-def handle_preflight():
-    if request.method == "OPTIONS":
-        response = make_response()
-        if request.headers.get('Origin') == 'http://localhost:3000':
-            response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
-        else:
-            response.headers.add('Access-Control-Allow-Origin', 'https://lawn-peak-front.onrender.com')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Origin')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-        response.headers.add('Access-Control-Max-Age', '3600')
-        return response
-
-@app.after_request
-def after_request(response):
-    if request.headers.get('Origin') == 'http://localhost:3000':
-        response.headers['Access-Control-Allow-Origin'] = 'http://localhost:3000'
-    else:
-        response.headers['Access-Control-Allow-Origin'] = 'https://lawn-peak-front.onrender.com'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Origin'
-    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
-    response.headers['Access-Control-Max-Age'] = '3600'
-    return response
-
-# Add CORS preflight handler
 @app.route('/charge-customer', methods=['POST', 'OPTIONS'])
 def charge_customer():
     # Handle preflight CORS request
@@ -369,14 +365,18 @@ def create_payment_intent():
 def create_setup_intent():
     try:
         if request.method == 'OPTIONS':
-            response = make_response()
-            response.headers.add('Access-Control-Allow-Origin', '*')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Stripe-Publishable-Key')
-            response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
-            return response
+            return after_request(make_response())
 
         data = request.get_json()
-        logger.info(f"Received request data: {data}")
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        required_fields = ['service_type', 'address', 'lot_size', 'phone']
+        missing_fields = [field for field in required_fields if not data.get(field)]
+        if missing_fields:
+            return jsonify({'error': f'Missing required fields: {", ".join(missing_fields)}'}), 400
+
+        logger.info(f"Creating setup intent with data: {data}")
         
         # Create a new customer
         customer = stripe.Customer.create(
@@ -390,7 +390,7 @@ def create_setup_intent():
         )
         logger.info(f"Created customer: {customer.id}")
 
-        # Create a checkout session with more options
+        # Create a checkout session
         session = stripe.checkout.Session.create(
             customer=customer.id,
             payment_method_types=['card'],
@@ -413,10 +413,10 @@ def create_setup_intent():
 
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error: {str(e)}")
-        return jsonify({'error': str(e)}), 400
+        return jsonify({'error': str(e.user_message)}), 400
     except Exception as e:
-        logger.error(f"Server error: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        logger.error(f"Server error in create_setup_intent: {str(e)}")
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
