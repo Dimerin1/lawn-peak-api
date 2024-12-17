@@ -926,20 +926,39 @@ def get_config():
 def create_referral():
     """Create a new referral code for a customer."""
     try:
-        data = request.json
+        data = request.get_json()
         customer_email = data.get('customer_email')
+        
         if not customer_email:
             return jsonify({'error': 'Customer email is required'}), 400
+            
+        # First ensure the customer exists in the database
+        conn = sqlite3.connect('payments.db')
+        c = conn.cursor()
         
-        expiration_days = data.get('expiration_days')
-        code = referral_db.create_referral_code(customer_email, expiration_days)
+        # Create customers table if it doesn't exist
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS customers (
+                email TEXT PRIMARY KEY,
+                created_at INTEGER NOT NULL
+            )
+        ''')
         
-        if code:
-            logger.info(f"Created referral code {code} for customer {customer_email}")
-            return jsonify({'code': code})
-        return jsonify({'error': 'Failed to create referral code'}), 500
+        # Insert customer if they don't exist
+        current_time = int(time.time())
+        c.execute('''
+            INSERT OR IGNORE INTO customers (email, created_at)
+            VALUES (?, ?)
+        ''', (customer_email, current_time))
+        
+        conn.commit()
+        conn.close()
+        
+        # Now create the referral code
+        result = referral_db.create_referral_code(customer_email)
+        return jsonify(result)
     except Exception as e:
-        logger.error(f"Error creating referral code: {str(e)}")
+        app.logger.error(f"Error creating referral code: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/referral/validate', methods=['POST'])
