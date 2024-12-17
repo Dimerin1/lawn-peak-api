@@ -1,5 +1,4 @@
 import * as React from "react"
-import { motion } from "framer-motion"
 
 // Service configuration
 const SERVICES = {
@@ -290,17 +289,22 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         phone: "",
         price: 0,
         showPrice: false,
-        startDate: ""
+        startDate: "",
+        email: "", 
+        referralCode: "", 
     });
 
     const [priceDisplay, setPriceDisplay] = React.useState("")
     const [error, setError] = React.useState("")
     const [isLoading, setIsLoading] = React.useState(false)
-    const [isProcessingPayment, setIsProcessingPayment] = React.useState(false);
-    const [paymentError, setPaymentError] = React.useState("");
+    const [isProcessingPayment, setIsProcessingPayment] = React.useState(false)
+    const [paymentError, setPaymentError] = React.useState("")
     const [showPrice, setShowPrice] = React.useState(false)
     const [showCalendar, setShowCalendar] = React.useState(false)
-    const [stripePublishableKey, setStripePublishableKey] = React.useState("");
+    const [stripePublishableKey, setStripePublishableKey] = React.useState("")
+    const [referralError, setReferralError] = React.useState("")
+    const [isValidatingReferral, setIsValidatingReferral] = React.useState(false)
+    const [referralDiscount, setReferralDiscount] = React.useState(0)
     const [selectedDate, setSelectedDate] = React.useState(() => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -315,11 +319,6 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         phone: false,
         startDate: false
     });
-
-    const [referralCode, setReferralCode] = React.useState("");
-    const [referralError, setReferralError] = React.useState("");
-    const [referralDiscount, setReferralDiscount] = React.useState(0);
-    const [isValidatingReferral, setIsValidatingReferral] = React.useState(false);
 
     const calendarRef = React.useRef(null);
 
@@ -633,7 +632,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     start_date: formData.startDate,
                     success_url: successUrl,
                     cancel_url: cancelUrl,
-                    referral_code: referralCode || null
+                    referral_code: formData.referralCode || null
                 })
             });
 
@@ -669,20 +668,25 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
 
     const shouldShowCalendarInput = formData.service && formData.lotSize;
 
+    const handleReferralCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value.toUpperCase()
+        handleInputChange("referralCode", value)
+    }
+
     const validateReferralCode = async () => {
-        if (!referralCode) {
-            setReferralError("");
-            setReferralDiscount(0);
-            return;
+        if (!formData.referralCode) {
+            setReferralError("")
+            setReferralDiscount(0)
+            return
         }
 
-        setIsValidatingReferral(true);
+        setIsValidatingReferral(true)
         try {
-            const apiBaseUrl = process.env.NODE_ENV === 'development' 
-                ? 'http://localhost:5000'
+            const apiBaseUrl = window.location.hostname === "localhost"
+                ? "http://localhost:8080"
                 : window.location.hostname.includes('staging')
                     ? 'https://lawn-peak-api-staging.onrender.com'
-                    : 'https://lawn-peak-api.onrender.com';
+                    : 'https://lawn-peak-api.onrender.com'
 
             const response = await fetch(`${apiBaseUrl}/api/referral/validate`, {
                 method: 'POST',
@@ -690,33 +694,37 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    code: referralCode,
+                    code: formData.referralCode,
                     referee_email: formData.email || 'Not provided'
                 })
-            });
+            })
 
-            const data = await response.json();
+            const data = await response.json()
             if (response.ok && data.valid) {
-                setReferralError("");
-                setReferralDiscount(data.discount);
+                setReferralError("")
+                setReferralDiscount(data.discount)
                 // Update final price with discount
-                const discountedPrice = formData.price * (1 - data.discount);
-                setFormData(prev => ({ ...prev, price: discountedPrice }));
+                if (formData.price) {
+                    const discountedPrice = formData.price * (1 - data.discount)
+                    setFormData(prev => ({ ...prev, price: Math.round(discountedPrice) }))
+                }
             } else {
-                setReferralError(data.error || "Failed to validate referral code");
-                setReferralDiscount(0);
-                setFormData(prev => ({ ...prev, price: calculatePrice(prev.lotSize, prev.service) }));
+                setReferralError(data.error || "Invalid referral code")
+                setReferralDiscount(0)
+                // Reset price to original if there was a discount applied
+                if (formData.lotSize && formData.service) {
+                    const originalPrice = calculatePrice(formData.lotSize, formData.service)
+                    setFormData(prev => ({ ...prev, price: originalPrice }))
+                }
             }
         } catch (error) {
-            setReferralError("Failed to validate referral code");
-            setReferralDiscount(0);
-            setFormData(prev => ({ ...prev, price: calculatePrice(prev.lotSize, prev.service) }));
+            console.error('Referral validation error:', error)
+            setReferralError("Failed to validate referral code")
+            setReferralDiscount(0)
         } finally {
-            setIsValidatingReferral(false);
+            setIsValidatingReferral(false)
         }
-    };
-
-    const isReferralSystemEnabled = process.env.NEXT_PUBLIC_ENABLE_REFERRAL_SYSTEM === 'true';
+    }
 
     return (
         <div style={{
@@ -871,41 +879,50 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 style={getInputStyle(fieldErrors.phone)}
                 placeholder="Phone number"
             />
-            {isReferralSystemEnabled && (
-                <div style={{ marginBottom: "16px" }}>
-                    <label style={errorStyle}>Referral Code (Optional)</label>
-                    <div style={{ display: "flex", gap: "8px" }}>
-                        <input
-                            type="text"
-                            value={referralCode}
-                            onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
-                            onBlur={validateReferralCode}
-                            style={{
-                                ...inputStyle,
-                                flex: 1,
-                                textTransform: "uppercase"
-                            }}
-                            placeholder="Enter referral code"
-                        />
-                        {isValidatingReferral && (
-                            <div style={{ display: "flex", alignItems: "center", padding: "0 12px" }}>
-                                <motion.div
-                                    animate={{ rotate: 360 }}
-                                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                                >
-                                    ⟳
-                                </motion.div>
-                            </div>
-                        )}
+
+            <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => handleInputChange("email", e.target.value)}
+                style={getInputStyle(false)}
+                placeholder="Email (optional)"
+            />
+
+            <div style={{ position: 'relative' }}>
+                <input
+                    type="text"
+                    value={formData.referralCode}
+                    onChange={handleReferralCodeChange}
+                    onBlur={validateReferralCode}
+                    style={getInputStyle(!!referralError)}
+                    placeholder="Referral code (optional)"
+                    maxLength={8}
+                />
+                {isValidatingReferral && (
+                    <div style={{ 
+                        position: 'absolute', 
+                        right: '12px', 
+                        top: '50%', 
+                        transform: 'translateY(-50%)',
+                        color: '#666'
+                    }}>
+                        Validating...
                     </div>
-                    {referralError && <div style={errorStyle}>{referralError}</div>}
-                    {referralDiscount > 0 && (
-                        <div style={{ ...errorStyle, marginTop: "4px", color: "#34C759" }}>
-                            {referralDiscount * 100}% discount applied!
-                        </div>
-                    )}
-                </div>
-            )}
+                )}
+                {referralError && (
+                    <div style={errorStyle}>{referralError}</div>
+                )}
+                {referralDiscount > 0 && (
+                    <div style={{
+                        fontSize: '14px',
+                        color: '#34C759',
+                        marginTop: '4px',
+                        marginLeft: '4px'
+                    }}>
+                        {`${referralDiscount * 100}% discount applied!`}
+                    </div>
+                )}
+            </div>
 
             {isLoading ? (
                 <div style={{
