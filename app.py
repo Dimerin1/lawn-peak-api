@@ -22,7 +22,6 @@ if not stripe.api_key:
     logger.error("STRIPE_SECRET_KEY environment variable is not set")
 else:
     logger.info(f"Stripe API key loaded (length: {len(stripe.api_key)})")
-    # Force live mode
     logger.info("Stripe API configured for live mode")
 
 # Initialize Google Services
@@ -42,18 +41,22 @@ app = Flask(__name__)
 logger.info("Flask app created")
 
 # Configure CORS
-CORS(app, 
-    resources={
-        r"/*": {
-            "origins": "*",
-            "methods": ["GET", "POST", "OPTIONS"],
-            "allow_headers": ["Content-Type"],
-            "expose_headers": ["Content-Type"],
-            "max_age": 3600,
-            "supports_credentials": False
-        }
+CORS(app, resources={
+    r"/*": {
+        "origins": ["*", "https://lawn-peak.framer.website"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "Stripe-Publishable-Key"],
+        "expose_headers": ["Content-Type"],
+        "max_age": 3600
     }
-)
+})
+
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Stripe-Publishable-Key')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
 
 # Add CORS preflight handler
 @app.before_request
@@ -61,7 +64,7 @@ def handle_preflight():
     if request.method == "OPTIONS":
         response = make_response()
         response.headers.add("Access-Control-Allow-Origin", "*")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization, Stripe-Publishable-Key")
         response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
         return response
 
@@ -183,24 +186,17 @@ def create_payment_intent():
 
 @app.route('/create-setup-intent', methods=['POST', 'OPTIONS'])
 def create_setup_intent():
-    # Handle CORS preflight request
-    if request.method == 'OPTIONS':
-        response = make_response()
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Stripe-Publishable-Key')
-        response.headers.add('Access-Control-Allow-Methods', 'POST')
-        return response
-
     try:
-        data = request.get_json()
-        
-        # Validate Stripe publishable key
-        stripe_publishable_key = request.headers.get('Stripe-Publishable-Key')
-        if stripe_publishable_key != os.getenv('STRIPE_PUBLISHABLE_KEY'):
-            response = jsonify({'error': 'Invalid Stripe publishable key'})
+        if request.method == 'OPTIONS':
+            response = make_response()
             response.headers.add('Access-Control-Allow-Origin', '*')
-            return response, 401
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Stripe-Publishable-Key')
+            response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
+            return response
 
+        data = request.get_json()
+        logger.info(f"Received request data: {data}")
+        
         # Create a new customer
         customer = stripe.Customer.create(
             description="Customer for LawnPeak service",
@@ -211,32 +207,42 @@ def create_setup_intent():
                 'phone': data.get('phone')
             }
         )
+        logger.info(f"Created customer: {customer.id}")
 
-        # Create a checkout session
+        # Create a checkout session with more options
         session = stripe.checkout.Session.create(
             customer=customer.id,
             payment_method_types=['card'],
             mode='setup',
             success_url=data.get('success_url', request.host_url),
-            cancel_url=data.get('cancel_url', request.host_url)
+            cancel_url=data.get('cancel_url', request.host_url),
+            payment_method_options={
+                'card': {
+                    'setup_future_usage': 'off_session'
+                }
+            },
+            consent_collection={
+                'terms_of_service': 'none'
+            },
+            custom_text={
+                'submit': {
+                    'message': 'By adding your card, you agree to be charged after the service is completed.'
+                }
+            }
         )
+        logger.info(f"Created session: {session.id}")
 
-        response = jsonify({
-            'setupIntentUrl': session.url
+        return jsonify({
+            'setupIntentUrl': session.url,
+            'sessionId': session.id
         })
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response
 
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error: {str(e)}")
-        response = jsonify({'error': str(e)})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response, 400
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
         logger.error(f"Server error: {str(e)}")
-        response = jsonify({'error': 'Internal server error'})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response, 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/charge-customer', methods=['POST', 'OPTIONS'])
 def charge_customer():
