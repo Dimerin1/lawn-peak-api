@@ -41,15 +41,26 @@ app = Flask(__name__)
 logger.info("Flask app created")
 
 # Configure CORS
-CORS(app, resources={
-    r"/*": {
-        "origins": ["*", "https://lawnpeak.com", "https://www.lawnpeak.com"],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "Stripe-Publishable-Key", "Referer", "Sec-Ch-Ua", "User-Agent"],
-        "expose_headers": ["Content-Type"],
-        "max_age": 3600
-    }
-})
+CORS(app, 
+     resources={r"/*": {
+         "origins": ["https://lawnpeak.com"],
+         "methods": ["GET", "POST", "OPTIONS"],
+         "allow_headers": ["Content-Type", "Authorization", "Stripe-Publishable-Key"],
+         "supports_credentials": False,
+         "max_age": 3600
+     }},
+     expose_headers=["Content-Type"]
+)
+
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = make_response()
+        response.headers.add("Access-Control-Allow-Origin", "https://lawnpeak.com")
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Stripe-Publishable-Key')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+        response.headers.add('Access-Control-Max-Age', '3600')
+        return response
 
 @app.after_request
 def after_request(response):
@@ -63,14 +74,126 @@ def after_request(response):
     return response
 
 # Add CORS preflight handler
-@app.before_request
-def handle_preflight():
+@app.route('/charge-customer', methods=['POST', 'OPTIONS'])
+def charge_customer():
+    # Handle preflight CORS request
     if request.method == "OPTIONS":
         response = make_response()
         response.headers.add("Access-Control-Allow-Origin", "*")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization, Stripe-Publishable-Key")
-        response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
+        response.headers.add("Access-Control-Allow-Methods", "POST")
         return response
+
+    try:
+        logger.info("Received charge-customer request")
+        data = request.json
+        logger.info(f"Request data: {data}")
+        
+        customer_id = data.get('customer_id')
+        amount = data.get('amount')  # Amount in dollars
+        
+        if not all([customer_id, amount]):
+            logger.error("Missing required fields")
+            return jsonify({'error': 'Customer ID and amount are required'}), 400
+
+        # Get customer's default payment method
+        logger.info(f"Retrieving customer {customer_id}")
+        customer = stripe.Customer.retrieve(customer_id)
+        logger.info(f"Retrieved customer: {customer.id}")
+        
+        payment_methods = stripe.PaymentMethod.list(
+            customer=customer_id,
+            type='card'
+        )
+        logger.info(f"Found {len(payment_methods.data)} payment methods")
+        
+        if not payment_methods.data:
+            logger.error("No payment method found")
+            return jsonify({'error': 'No payment method found for customer'}), 400
+
+        # Create and confirm the payment intent
+        logger.info(f"Creating payment intent for amount {amount}")
+        payment_intent = stripe.PaymentIntent.create(
+            amount=int(float(amount) * 100),  # Convert to cents
+            currency='usd',
+            customer=customer_id,
+            payment_method=payment_methods.data[0].id,
+            off_session=True,
+            confirm=True,
+            metadata=customer.metadata
+        )
+        logger.info(f"Payment intent created: {payment_intent.id}")
+        
+        # Update customer metadata to store charge date
+        current_time = time.strftime('%d.%m.%Y %H:%M')  # Added time in 24-hour format
+        customer_metadata = dict(customer.metadata)  # Convert from StripeObject to dict
+        customer_metadata['charge_date'] = current_time
+        
+        # Update customer with new metadata
+        logger.info("Updating customer metadata")
+        stripe.Customer.modify(
+            customer_id,
+            metadata=customer_metadata
+        )
+        logger.info("Customer metadata updated")
+        
+        # Get customer data from Google Sheets
+        service = get_sheets_service()
+        SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID', '19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA')
+        
+        result = service.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range='A:I'
+        ).execute()
+        values = result.get('values', [])
+        
+        # Find the customer's row
+        customer_row = None
+        for i, row in enumerate(values):
+            if len(row) > 2 and row[2] == customer.email:  # Email is in column C (index 2)
+                customer_row = i
+                break
+        
+        if customer_row is not None:
+            # Update the Charged Date column
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            update_range = f'I{customer_row + 1}'  # +1 because sheets are 1-indexed
+            
+            service.spreadsheets().values().update(
+                spreadsheetId=SPREADSHEET_ID,
+                range=update_range,
+                valueInputOption='USER_ENTERED',
+                body={'values': [[now]]}
+            ).execute()
+            
+            logger.info(f"Updated charge date for customer {customer.email}")
+        else:
+            logger.warning(f"Customer {customer.email} not found in sheet")
+        
+        response = jsonify({
+            'success': True,
+            'payment_intent_id': payment_intent.id,
+            'amount': amount,
+            'status': payment_intent.status,
+            'charge_date': current_time
+        })
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        logger.info("Charge completed successfully")
+        return response
+
+    except stripe.error.CardError as e:
+        logger.error(f"Card error: {str(e)}")
+        error_response = jsonify({'error': 'Card was declined', 'details': str(e)})
+        error_response.headers.add('Access-Control-Allow-Origin', '*')
+        error_response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        return error_response, 400
+    except Exception as e:
+        logger.error(f"Error charging customer: {str(e)}")
+        error_response = jsonify({'error': 'An unexpected error occurred', 'details': str(e)})
+        error_response.headers.add('Access-Control-Allow-Origin', '*')
+        error_response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        return error_response, 500
 
 @app.route('/')
 def home():
@@ -247,127 +370,6 @@ def create_setup_intent():
     except Exception as e:
         logger.error(f"Server error: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
-
-@app.route('/charge-customer', methods=['POST', 'OPTIONS'])
-def charge_customer():
-    # Handle preflight CORS request
-    if request.method == "OPTIONS":
-        response = make_response()
-        response.headers.add("Access-Control-Allow-Origin", "*")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
-        response.headers.add("Access-Control-Allow-Methods", "POST")
-        return response
-
-    try:
-        logger.info("Received charge-customer request")
-        data = request.json
-        logger.info(f"Request data: {data}")
-        
-        customer_id = data.get('customer_id')
-        amount = data.get('amount')  # Amount in dollars
-        
-        if not all([customer_id, amount]):
-            logger.error("Missing required fields")
-            return jsonify({'error': 'Customer ID and amount are required'}), 400
-
-        # Get customer's default payment method
-        logger.info(f"Retrieving customer {customer_id}")
-        customer = stripe.Customer.retrieve(customer_id)
-        logger.info(f"Retrieved customer: {customer.id}")
-        
-        payment_methods = stripe.PaymentMethod.list(
-            customer=customer_id,
-            type='card'
-        )
-        logger.info(f"Found {len(payment_methods.data)} payment methods")
-        
-        if not payment_methods.data:
-            logger.error("No payment method found")
-            return jsonify({'error': 'No payment method found for customer'}), 400
-
-        # Create and confirm the payment intent
-        logger.info(f"Creating payment intent for amount {amount}")
-        payment_intent = stripe.PaymentIntent.create(
-            amount=int(float(amount) * 100),  # Convert to cents
-            currency='usd',
-            customer=customer_id,
-            payment_method=payment_methods.data[0].id,
-            off_session=True,
-            confirm=True,
-            metadata=customer.metadata
-        )
-        logger.info(f"Payment intent created: {payment_intent.id}")
-        
-        # Update customer metadata to store charge date
-        current_time = time.strftime('%d.%m.%Y %H:%M')  # Added time in 24-hour format
-        customer_metadata = dict(customer.metadata)  # Convert from StripeObject to dict
-        customer_metadata['charge_date'] = current_time
-        
-        # Update customer with new metadata
-        logger.info("Updating customer metadata")
-        stripe.Customer.modify(
-            customer_id,
-            metadata=customer_metadata
-        )
-        logger.info("Customer metadata updated")
-        
-        # Get customer data from Google Sheets
-        service = get_sheets_service()
-        SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID', '19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA')
-        
-        result = service.spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range='A:I'
-        ).execute()
-        values = result.get('values', [])
-        
-        # Find the customer's row
-        customer_row = None
-        for i, row in enumerate(values):
-            if len(row) > 2 and row[2] == customer.email:  # Email is in column C (index 2)
-                customer_row = i
-                break
-        
-        if customer_row is not None:
-            # Update the Charged Date column
-            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            update_range = f'I{customer_row + 1}'  # +1 because sheets are 1-indexed
-            
-            service.spreadsheets().values().update(
-                spreadsheetId=SPREADSHEET_ID,
-                range=update_range,
-                valueInputOption='USER_ENTERED',
-                body={'values': [[now]]}
-            ).execute()
-            
-            logger.info(f"Updated charge date for customer {customer.email}")
-        else:
-            logger.warning(f"Customer {customer.email} not found in sheet")
-        
-        response = jsonify({
-            'success': True,
-            'payment_intent_id': payment_intent.id,
-            'amount': amount,
-            'status': payment_intent.status,
-            'charge_date': current_time
-        })
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        logger.info("Charge completed successfully")
-        return response
-
-    except stripe.error.CardError as e:
-        logger.error(f"Card error: {str(e)}")
-        error_response = jsonify({'error': 'Card was declined', 'details': str(e)})
-        error_response.headers.add('Access-Control-Allow-Origin', '*')
-        error_response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        return error_response, 400
-    except Exception as e:
-        logger.error(f"Error charging customer: {str(e)}")
-        error_response = jsonify({'error': 'An unexpected error occurred', 'details': str(e)})
-        error_response.headers.add('Access-Control-Allow-Origin', '*')
-        error_response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        return error_response, 500
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
