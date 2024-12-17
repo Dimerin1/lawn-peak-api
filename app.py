@@ -30,9 +30,10 @@ else:
 # Initialize Google Services
 GOOGLE_SERVICES_AVAILABLE = True
 try:
+    # In Render, the secret file will be in the app root
     credentials = service_account.Credentials.from_service_account_file(
         'google-credentials.json',
-        scopes=['https://www.googleapis.com/auth/places']
+        scopes=['https://www.googleapis.com/auth/spreadsheets']
     )
     logger.info("Google credentials loaded successfully")
 except Exception as e:
