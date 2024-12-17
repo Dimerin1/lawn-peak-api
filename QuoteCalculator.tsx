@@ -341,7 +341,12 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
 
     React.useEffect(() => {
         // Fetch Stripe publishable key from backend
-        fetch('http://localhost:8080/config')
+        const apiBaseUrl = window.location.hostname.includes('staging')
+            ? 'https://lawn-peak-api-staging.onrender.com'
+            : window.location.hostname === 'localhost'
+                ? 'http://localhost:8080'
+                : 'https://lawn-peak-api.onrender.com'
+        fetch(`${apiBaseUrl}/config`)
             .then(response => response.json())
             .then(data => {
                 setStripePublishableKey(data.publishableKey);
@@ -595,9 +600,11 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
             };
 
             // Send quote data to Google Sheets
-            const apiBaseUrl = window.location.hostname === 'localhost'
-                ? 'http://localhost:8080'
-                : 'https://lawn-peak-api.onrender.com';
+            const apiBaseUrl = window.location.hostname.includes('staging')
+                ? 'https://lawn-peak-api-staging.onrender.com'
+                : window.location.hostname === 'localhost'
+                    ? 'http://localhost:8080'
+                    : 'https://lawn-peak-api.onrender.com';
 
             const quoteResponse = await fetch(`${apiBaseUrl}/submit-quote`, {
                 method: 'POST',
@@ -615,7 +622,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
             }
 
             // Proceed with setup intent
-            const setupIntentResponse = await fetch(`${apiBaseUrl}/create-setup-intent`, {
+            const setupIntentResponse = await fetch(`${window.location.hostname.includes('staging') ? 'https://lawn-peak-api-staging.onrender.com' : 'https://lawn-peak-api.onrender.com'}/create-setup-intent`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -632,7 +639,8 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     start_date: formData.startDate,
                     success_url: successUrl,
                     cancel_url: cancelUrl,
-                    referral_code: formData.referralCode || null
+                    referral_code: formData.referralCode || null,
+                    email: formData.email || 'Not provided'
                 })
             });
 
@@ -682,11 +690,11 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
 
         setIsValidatingReferral(true)
         try {
-            const apiBaseUrl = window.location.hostname === "localhost"
-                ? "http://localhost:8080"
-                : window.location.hostname.includes('staging')
-                    ? 'https://lawn-peak-api-staging.onrender.com'
-                    : 'https://lawn-peak-api.onrender.com'
+            const apiBaseUrl = window.location.hostname.includes('staging')
+                ? 'https://lawn-peak-api-staging.onrender.com'
+                : window.location.hostname === 'localhost'
+                    ? 'http://localhost:8080'
+                    : 'https://lawn-peak-api.onrender.com';
 
             const response = await fetch(`${apiBaseUrl}/api/referral/validate`, {
                 method: 'POST',
