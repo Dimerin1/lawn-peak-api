@@ -239,12 +239,11 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         address: "",
         lotSize: "",
         service: "",
-        price: null,
-        recurring: false,
         phone: "",
-        quoteId: null,
-        startDate: ""
+        price: 0,
+        showPrice: false
     });
+
     const [priceDisplay, setPriceDisplay] = React.useState("")
     const [error, setError] = React.useState("")
     const [isLoading, setIsLoading] = React.useState(false)
@@ -283,23 +282,19 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         setShowCalendar(false);
     };
 
-    const handleAddressSelect = async (address: string) => {
-        setIsLoading(true)
-        try {
-            setFormData(prev => ({
-                ...prev,
-                address
-            }))
-        } catch (err) {
-            setError(err.message || "Error with address selection")
-            setFormData(prev => ({
-                ...prev,
-                address: ""
-            }))
-        } finally {
-            setIsLoading(false)
-        }
-    }
+    const handleAddressSelect = (address) => {
+        setFormData(prev => ({
+            ...prev,
+            address: address
+        }));
+    };
+
+    const handleInputChange = (field, value) => {
+        setFormData(prev => ({
+            ...prev,
+            [field]: value
+        }));
+    };
 
     const calculatePrice = (lotSize: string, service: string) => {
         if (!lotSize) {
@@ -329,7 +324,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
 
     const handleLotSizeChange = (e) => {
         const value = e.target.value
-        setFormData(prev => ({ ...prev, lotSize: value }))
+        handleInputChange('lotSize', value)
         if (value && formData.service) {
             getQuote(value, formData.service)
         }
@@ -337,7 +332,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
 
     const handleServiceChange = (e) => {
         const value = e.target.value
-        setFormData(prev => ({ ...prev, service: value }))
+        handleInputChange('service', value)
         onServiceChange?.(value)
         if (formData.lotSize && value) {
             getQuote(formData.lotSize, value)
@@ -386,71 +381,72 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
             address: !formData.address,
             lotSize: !formData.lotSize,
             service: !formData.service,
-            phone: !formData.phone || formData.phone.length < 10 // Basic phone validation
+            phone: !formData.phone || formData.phone.length < 10
         };
         setFieldErrors(errors);
 
-        if (!isFormValid()) {
+        if (Object.values(errors).some(error => error)) {
             return;
         }
-        setIsProcessingPayment(true)
-        setPaymentError(null)
+
+        setIsProcessingPayment(true);
+        setPaymentError(null);
 
         try {
-            // First create Stripe setup intent for instant redirect
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/create-setup-intent`, {
+            const baseUrl = window.location.href.split('?')[0];
+            const successUrl = `${baseUrl}?setup=success`;
+            const cancelUrl = `${baseUrl}?setup=canceled`;
+
+            const requestData = {
+                price: formData.price,
+                service_type: formData.service,
+                address: formData.address,
+                lot_size: formData.lotSize,
+                phone: formData.phone,
+                success_url: successUrl,
+                cancel_url: cancelUrl
+            };
+
+            console.log('Creating setup intent with data:', requestData);
+
+            // Use the API URL from environment variable
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://lawn-peak-api.onrender.com';
+            const response = await fetch(`${apiUrl}/create-setup-intent`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Origin': 'https://lawnpeak.com'
                 },
-                body: JSON.stringify({
-                    return_url: window.location.origin + window.location.pathname,
-                    quoteData: {
-                        price: formData.price,
-                        service: formData.service,
-                        address: formData.address,
-                        lotSize: formData.lotSize,
-                        date: formData.startDate,
-                        name: formData.name,
-                        email: formData.email,
-                        phone: formData.phone,
-                    }
-                }),
-            })
+                body: JSON.stringify(requestData),
+                credentials: 'omit'
+            });
 
             if (!response.ok) {
-                throw new Error('Failed to create setup intent')
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
             }
 
-            const data = await response.json()
+            const data = await response.json();
+            
+            if (data.error) {
+                throw new Error(data.error);
+            }
 
-            // Submit to Google Sheets asynchronously - don't wait for response
-            fetch('https://api.lawnpeak.com/submit-quote', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    name: formData.name || '',
-                    email: formData.email || '',
-                    service_type: formData.service,
-                    phone: formData.phone || '',
-                    address: formData.address,
-                    lot_size: formData.lotSize,
-                    price: formData.price,
-                }),
-            }).catch(error => {
-                console.error('Failed to submit to Google Sheets:', error)
-                // Don't show error to user since payment setup succeeded
-            })
+            if (!data.setupIntentUrl) {
+                throw new Error('No setup URL returned from server');
+            }
 
-            // Redirect to Stripe immediately
-            window.location.href = data.setupIntentUrl
+            // Save form data to localStorage before redirect
+            localStorage.setItem('quoteFormData', JSON.stringify(formData));
+
+            // Redirect to Stripe Checkout
+            window.location.href = data.setupIntentUrl;
+
         } catch (error) {
-            console.error('Payment setup error:', error)
-            setPaymentError('Failed to set up payment. Please try again.')
+            console.error('Payment error:', error);
+            setPaymentError(error.message || 'An error occurred while setting up payment. Please try again.');
         } finally {
-            setIsProcessingPayment(false)
+            setIsProcessingPayment(false);
         }
     };
 
@@ -479,17 +475,8 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
     };
 
     const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        // Remove all non-digit characters for storage
-        const digitsOnly = value.replace(/\D/g, '');
-        
-        // Only store up to 10 digits
-        if (digitsOnly.length <= 10) {
-            setFormData(prev => ({
-                ...prev,
-                phone: formatPhoneNumber(digitsOnly)
-            }));
-        }
+        const value = formatPhoneNumber(e.target.value);
+        handleInputChange('phone', value);
     };
 
     const isFormValid = () => {
@@ -502,85 +489,58 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         );
     };
 
+    // Stripe configuration
+    const stripePublishableKey = 'pk_live_MFIjF2jscJwoZyT1M9iq3XFL00lrHwBGaP';
+
     return (
         <div style={{
             display: "flex",
             flexDirection: "column",
-            gap: "16px",
+            gap: "20px",
+            maxWidth: "600px",
+            margin: "0 auto",
+            padding: "20px"
         }}>
-            <div className="input-group">
-                <AddressInput
-                    value={formData.address}
-                    onChange={(value) =>
-                        setFormData((prev) => ({ ...prev, address: value }))
-                    }
-                    onSelect={handleAddressSelect}
-                    style={{
-                        input: inputStyle
-                    }}
-                    placeholder="Address"
-                />
-                {fieldErrors.address && (
-                    <div style={errorStyle}>
-                        Please enter your address
-                    </div>
-                )}
-            </div>
+            <AddressInput
+                value={formData.address}
+                onChange={(value) => handleInputChange('address', value)}
+                onSelect={handleAddressSelect}
+                placeholder="Enter your address"
+            />
+            
+            <select
+                value={formData.lotSize}
+                onChange={handleLotSizeChange}
+                style={selectStyle}
+            >
+                <option value="">Select lot size</option>
+                {lotSizeOptions.map(option => (
+                    <option key={option.value} value={option.value}>
+                        {option.label}
+                    </option>
+                ))}
+            </select>
 
-            <div className="input-group">
-                <select 
-                    value={formData.lotSize}
-                    onChange={handleLotSizeChange}
-                    style={getInputStyle(fieldErrors.lotSize)}
-                >
-                    <option value="" disabled selected>Select lot size</option>
-                    {lotSizeOptions.map(option => (
-                        <option key={option.value} value={option.value}>
-                            {option.label}
-                        </option>
-                    ))}
-                </select>
-                {fieldErrors.lotSize && (
-                    <div style={errorStyle}>
-                        Please select your lot size
-                    </div>
-                )}
-            </div>
+            <select
+                value={formData.service}
+                onChange={handleServiceChange}
+                style={selectStyle}
+            >
+                <option value="">Select service</option>
+                {serviceTypes.map(option => (
+                    <option key={option.value} value={option.value}>
+                        {option.label}
+                    </option>
+                ))}
+            </select>
 
-            <div className="input-group">
-                <select 
-                    value={formData.service}
-                    onChange={handleServiceChange}
-                    style={getInputStyle(fieldErrors.service)}
-                >
-                    <option value="" disabled selected>Select your service</option>
-                    {serviceTypes.map(option => (
-                        <option key={option.value} value={option.value}>
-                            {option.label}
-                        </option>
-                    ))}
-                </select>
-                {fieldErrors.service && (
-                    <div style={errorStyle}>
-                        Please select a service type
-                    </div>
-                )}
-            </div>
-
-            <div className="input-group">
-                <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={handlePhoneChange}
-                    style={getInputStyle(fieldErrors.phone)}
-                    placeholder="Phone"
-                />
-                {fieldErrors.phone && (
-                    <div style={errorStyle}>
-                        {!formData.phone ? 'Please enter your phone number' : 'Phone number must be at least 10 digits'}
-                    </div>
-                )}
-            </div>
+            <input
+                type="tel"
+                value={formData.phone}
+                onChange={handlePhoneChange}
+                placeholder="Phone number"
+                style={inputStyle}
+            />
             {isLoading ? (
                 <div style={{
                     textAlign: "center",
@@ -967,24 +927,42 @@ addPropertyControls(QuoteCalculator, {
     }
 })
 
+const loadGoogleMapsScript = () => {
+    return new Promise((resolve, reject) => {
+        if (window.google?.maps?.places) {
+            resolve(window.google.maps);
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyDPMxdPl54WLri6kvQl6XNjVzTsXhuzOXw&libraries=places`;
+        script.async = true;
+        script.defer = true;
+        script.onload = () => resolve(window.google.maps);
+        script.onerror = (error) => reject(error);
+        document.head.appendChild(script);
+    });
+};
+
 function AddressInput({ value, onChange, onSelect, style, placeholder }) {
     const [addressError, setAddressError] = React.useState("")
     const [isLoadingAddress, setIsLoadingAddress] = React.useState(false)
     const inputRef = React.useRef(null)
+    const autocompleteRef = React.useRef(null)
+    const [selectedAddress, setSelectedAddress] = React.useState(value || "")
 
     React.useEffect(() => {
-        let autocomplete = null;
-        const initAutocomplete = () => {
-            if (!window.google?.maps?.places) {
-                console.log("Waiting for Google Maps to load...");
-                setTimeout(initAutocomplete, 500);
-                return;
-            }
-
+        let isMounted = true;
+        
+        const initAutocomplete = async () => {
             try {
-                if (inputRef.current && !autocomplete) {
-                    console.log("Initializing autocomplete...");
-                    autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
+                setIsLoadingAddress(true);
+                await loadGoogleMapsScript();
+
+                if (!isMounted) return;
+
+                if (inputRef.current && !autocompleteRef.current) {
+                    const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
                         componentRestrictions: { country: "us" },
                         fields: ["formatted_address", "geometry"],
                         types: ["address"]
@@ -993,24 +971,47 @@ function AddressInput({ value, onChange, onSelect, style, placeholder }) {
                     autocomplete.addListener("place_changed", () => {
                         const place = autocomplete.getPlace();
                         if (place.formatted_address) {
+                            setSelectedAddress(place.formatted_address);
+                            onChange(place.formatted_address);
                             onSelect(place.formatted_address);
                         }
                     });
+
+                    autocompleteRef.current = autocomplete;
                 }
             } catch (error) {
                 console.error("Error initializing autocomplete:", error);
-                setAddressError("Error initializing address search");
+                if (isMounted) {
+                    setAddressError("Error initializing address search");
+                }
+            } finally {
+                if (isMounted) {
+                    setIsLoadingAddress(false);
+                }
             }
         };
 
         initAutocomplete();
 
         return () => {
-            if (autocomplete) {
-                window.google?.maps?.event?.clearInstanceListeners(autocomplete);
+            isMounted = false;
+            if (autocompleteRef.current) {
+                window.google?.maps?.event?.clearInstanceListeners(autocompleteRef.current);
             }
         };
-    }, [onSelect]);
+    }, [onSelect, onChange]);
+
+    React.useEffect(() => {
+        if (value !== selectedAddress) {
+            setSelectedAddress(value || "");
+        }
+    }, [value]);
+
+    const handleInputChange = (e) => {
+        const newValue = e.target.value;
+        setSelectedAddress(newValue);
+        onChange(newValue);
+    };
 
     return (
         <div style={{ width: "100%" }}>
@@ -1018,8 +1019,8 @@ function AddressInput({ value, onChange, onSelect, style, placeholder }) {
                 <input
                     ref={inputRef}
                     type="text"
-                    value={value}
-                    onChange={(e) => onChange(e.target.value)}
+                    value={selectedAddress}
+                    onChange={handleInputChange}
                     placeholder={placeholder}
                     disabled={isLoadingAddress}
                     style={{
@@ -1054,7 +1055,7 @@ function AddressInput({ value, onChange, onSelect, style, placeholder }) {
                 </div>
             )}
         </div>
-    )
+    );
 }
 
 export default QuoteCalculator

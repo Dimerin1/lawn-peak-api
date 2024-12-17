@@ -43,34 +43,37 @@ logger.info("Flask app created")
 # Configure CORS
 CORS(app, 
      resources={r"/*": {
-         "origins": ["https://lawnpeak.com"],
+         "origins": ["https://lawnpeak.com", "http://localhost:3000"],
          "methods": ["GET", "POST", "OPTIONS"],
-         "allow_headers": ["Content-Type", "Authorization", "Stripe-Publishable-Key"],
+         "allow_headers": ["Content-Type", "Authorization", "Origin"],
+         "expose_headers": ["Content-Type"],
          "supports_credentials": False,
          "max_age": 3600
-     }},
-     expose_headers=["Content-Type"]
+     }}
 )
 
 @app.before_request
 def handle_preflight():
     if request.method == "OPTIONS":
         response = make_response()
-        response.headers.add("Access-Control-Allow-Origin", "https://lawnpeak.com")
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Stripe-Publishable-Key')
+        if request.headers.get('Origin') == 'https://lawnpeak.com':
+            response.headers.add('Access-Control-Allow-Origin', 'https://lawnpeak.com')
+        else:
+            response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Origin')
         response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
         response.headers.add('Access-Control-Max-Age', '3600')
         return response
 
 @app.after_request
 def after_request(response):
-    origin = request.headers.get('Origin')
-    if origin in ['https://lawnpeak.com', 'https://www.lawnpeak.com']:
-        response.headers.add('Access-Control-Allow-Origin', origin)
+    if request.headers.get('Origin') == 'https://lawnpeak.com':
+        response.headers['Access-Control-Allow-Origin'] = 'https://lawnpeak.com'
     else:
-        response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Stripe-Publishable-Key,Referer,Sec-Ch-Ua,User-Agent')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Origin'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
+    response.headers['Access-Control-Max-Age'] = '3600'
     return response
 
 # Add CORS preflight handler
