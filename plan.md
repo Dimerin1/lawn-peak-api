@@ -36,6 +36,14 @@ A complete solution for integrating address-based quotes and Stripe payment proc
 - [x] Final Payment Capture
 - [x] Recurring Payment Setup for Weekly/Bi-Weekly/Monthly Services
 
+### 5. Google Sheets Integration (Completed)
+- [x] Set up Google Sheets API integration
+- [x] Create service account and configure credentials
+- [x] Add quote data storage functionality
+- [x] Store customer information (name, email, service type, etc.)
+- [x] Implement timestamp tracking for submissions
+- [x] Connect name input from step 1 with quote data
+
 ## Progress Update (Dec 16, 2024)
 
 ### Completed Tasks
@@ -52,6 +60,9 @@ A complete solution for integrating address-based quotes and Stripe payment proc
 - [x] Fixed network errors in charging functionality
 - [x] Added detailed logging for better debugging
 - [x] Improved error handling in both frontend and backend
+- [x] Integrated Google Sheets for quote data storage
+- [x] Connected multi-step form data with sheets
+- [x] Added name input component in step 1
 
 ### Current Status
 - QuoteCalculator component handles the entire flow from quote to payment
@@ -61,6 +72,8 @@ A complete solution for integrating address-based quotes and Stripe payment proc
 - Admin Dashboard allows viewing and managing customers
 - Recurring payments are properly handled
 - Customer charging works with proper timestamps
+- Quote data is automatically stored in Google Sheets
+- Multi-step form properly collects and stores all customer information
 
 ### Next Steps
 1. Add success and cancel pages for post-payment flow

@@ -8,9 +8,6 @@ from dotenv import load_dotenv
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 import datetime
-from threading import Thread
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -173,6 +170,7 @@ def create_payment_intent():
 @app.route('/create-setup-intent', methods=['POST'])
 def create_setup_intent():
     try:
+        # Add CORS headers for preflight
         if request.method == 'OPTIONS':
             response = make_response()
             response.headers.add('Access-Control-Allow-Origin', '*')
@@ -184,37 +182,56 @@ def create_setup_intent():
         print("Received setup intent request with data:", data)
         return_url = data.get('return_url')
         quote_data = data.get('quoteData', {})
+        is_test_mode = data.get('test_mode', True)  # Default to test mode for safety
         
         if not return_url:
             print("Error: Return URL is required")
             return jsonify({'error': 'Return URL is required'}), 400
 
-        # Create a Stripe Checkout Session directly with future usage
+        # Create a Customer
+        print("Creating Stripe customer with metadata:", {
+            'service_type': quote_data.get('service'),
+            'address': quote_data.get('address'),
+            'lot_size': quote_data.get('lotSize'),
+            'phone': quote_data.get('phone'),
+            'price': str(quote_data.get('price', '0'))
+        })
+        
+        customer = stripe.Customer.create(
+            metadata={
+                'service_type': quote_data.get('service'),
+                'address': quote_data.get('address'),
+                'lot_size': quote_data.get('lotSize'),
+                'phone': quote_data.get('phone'),
+                'price': str(quote_data.get('price', '0'))
+            }
+        )
+        print("Created Stripe customer:", customer.id)
+        
+        # In test mode, we'll use a fixed success_url to avoid the {CUSTOMER_ID} placeholder issue
+        success_url = (
+            return_url + '?setup=success&customer_id=' + 
+            ('test_customer' if is_test_mode else '{CUSTOMER_ID}')
+        )
+        
+        # Create a Stripe Checkout Session for setup only
+        print("Creating Stripe checkout session for customer:", customer.id)
         session = stripe.checkout.Session.create(
             mode='setup',
+            customer=customer.id,
             payment_method_types=['card'],
             metadata={
                 'service_type': quote_data.get('service'),
                 'address': quote_data.get('address'),
                 'lot_size': quote_data.get('lotSize'),
                 'phone': quote_data.get('phone'),
-                'price': str(quote_data.get('price', '0')),
-                'name': quote_data.get('name', ''),
-                'email': quote_data.get('email', '')
+                'price': str(quote_data.get('price', '0'))
             },
-            success_url=return_url + '?setup=success&customer_id={CUSTOMER_ID}',
+            success_url=success_url,
             cancel_url=return_url + '?setup=canceled',
             payment_intent_data=None,  # Ensure no payment intent is created
-            setup_intent_data={
-                'metadata': {
-                    'service_type': quote_data.get('service'),
-                    'address': quote_data.get('address'),
-                    'lot_size': quote_data.get('lotSize'),
-                    'price': str(quote_data.get('price', '0'))
-                }
-            },
             consent_collection={
-                'terms_of_service': 'none',
+                'terms_of_service': 'none',  # Don't show terms of service
             },
             custom_text={
                 'submit': {
@@ -222,14 +239,15 @@ def create_setup_intent():
                 }
             }
         )
-
         print("Created Stripe checkout session:", session.id)
         print("Session URL:", session.url)
+        print("Success URL:", success_url)
         
         response = jsonify({
             'setupIntentUrl': session.url
         })
         
+        # Add CORS headers to the actual response
         response.headers.add('Access-Control-Allow-Origin', '*')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
         return response
@@ -239,48 +257,6 @@ def create_setup_intent():
         error_response = jsonify({'error': str(e)})
         error_response.headers.add('Access-Control-Allow-Origin', '*')
         error_response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        return error_response, 400
-
-@app.route('/fast-checkout', methods=['POST'])
-def fast_checkout():
-    try:
-        data = request.json
-        quote_data = data.get('quoteData', {})
-        
-        # Create a Stripe Checkout Session directly
-        session = stripe.checkout.Session.create(
-            mode='setup',
-            payment_method_types=['card'],
-            success_url=data.get('return_url', '') + '?setup=success&customer_id={CUSTOMER_ID}',
-            cancel_url=data.get('return_url', '') + '?setup=canceled',
-            metadata={
-                'service_type': quote_data.get('service'),
-                'address': quote_data.get('address'),
-                'lot_size': quote_data.get('lotSize'),
-                'phone': quote_data.get('phone'),
-                'price': str(quote_data.get('price', '0'))
-            },
-            payment_intent_data=None,  # Ensure no payment intent is created
-            consent_collection={
-                'terms_of_service': 'none',
-            },
-            custom_text={
-                'submit': {
-                    'message': 'By adding your card, you agree to be charged after the service is completed. No charges will be made now.'
-                }
-            }
-        )
-        
-        response = jsonify({
-            'url': session.url
-        })
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response
-
-    except Exception as e:
-        print('Error creating checkout:', str(e))
-        error_response = jsonify({'error': str(e)})
-        error_response.headers.add('Access-Control-Allow-Origin', '*')
         return error_response, 400
 
 @app.route('/charge-customer', methods=['POST', 'OPTIONS'])
@@ -791,39 +767,6 @@ def append_to_sheet_endpoint():
         logger.error(f"Error appending to sheet: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/submit-quote-async', methods=['POST'])
-def submit_quote_async():
-    try:
-        data = request.json
-        # Start a new thread for Google Sheets operation
-        Thread(target=async_submit_to_sheets, args=(data,)).start()
-        
-        response = jsonify({'status': 'processing'})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response
-
-    except Exception as e:
-        print('Error starting async submission:', str(e))
-        error_response = jsonify({'error': str(e)})
-        error_response.headers.add('Access-Control-Allow-Origin', '*')
-        return error_response, 400
-
-def async_submit_to_sheets(data):
-    try:
-        worksheet = get_worksheet()
-        worksheet.append_row([
-            data.get('name', ''),
-            data.get('email', ''),
-            data.get('service_type', ''),
-            data.get('phone', ''),
-            data.get('address', ''),
-            data.get('lot_size', ''),
-            str(data.get('price', '0')),
-            datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        ])
-    except Exception as e:
-        print('Error submitting to sheets:', str(e))
-
 # Google Sheets Integration
 def get_sheets_service():
     credentials = service_account.Credentials.from_service_account_info({
@@ -840,28 +783,176 @@ def get_sheets_service():
     })
     return build('sheets', 'v4', credentials=credentials)
 
-def get_worksheet():
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('google-credentials.json', scope)
-    client = gspread.authorize(creds)
-    sheet = client.open('Lawn Quote Calculator').sheet1
-    return sheet
-
 def append_to_sheet(data):
     try:
         logger.info("Creating Google Sheets service...")
-        worksheet = get_worksheet()
-        worksheet.append_row([
+        service = get_sheets_service()
+        SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID', '19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA')
+        logger.info(f"Using spreadsheet ID: {SPREADSHEET_ID}")
+        
+        # Format data for sheets
+        row = [
+            time.strftime('%Y-%m-%d %H:%M:%S'),  # Date
             data.get('name', ''),
             data.get('email', ''),
             data.get('service_type', ''),
             data.get('phone', ''),
             data.get('address', ''),
             data.get('lot_size', ''),
-            str(data.get('price', '0')),
-            datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        ])
-        logger.info("Successfully appended to sheet")
+            str(data.get('price', '')),
+            data.get('charge_date', '')
+        ]
+        
+        logger.info(f"Prepared row data: {row}")
+        
+        # First, get the current number of rows
+        result = service.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range='A:I'
+        ).execute()
+        values = result.get('values', [])
+        current_row = len(values) + 1
+
+        # If this is the first row, add headers
+        if current_row == 1:
+            headers = [
+                'Timestamp',
+                'Customer Name',
+                'Email',
+                'Service Type',
+                'Phone Number',
+                'Address',
+                'Lot Size',
+                'Price ($)',
+                'Charged Date'
+            ]
+            body = {
+                'values': [headers]
+            }
+            service.spreadsheets().values().append(
+                spreadsheetId=SPREADSHEET_ID,
+                range='A1:I1',
+                valueInputOption='USER_ENTERED',
+                insertDataOption='INSERT_ROWS',
+                body=body
+            ).execute()
+            current_row = 2
+
+        # Append the new row
+        body = {
+            'values': [row]
+        }
+        service.spreadsheets().values().append(
+            spreadsheetId=SPREADSHEET_ID,
+            range='A:I',
+            valueInputOption='USER_ENTERED',
+            insertDataOption='INSERT_ROWS',
+            body=body
+        ).execute()
+
+        # Apply formatting
+        requests = [
+            # Format headers
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": 0,
+                        "endRowIndex": 1,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": 9
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "backgroundColor": {
+                                "red": 0.2,
+                                "green": 0.5,
+                                "blue": 0.3
+                            },
+                            "textFormat": {
+                                "bold": True,
+                                "foregroundColor": {
+                                    "red": 1.0,
+                                    "green": 1.0,
+                                    "blue": 1.0
+                                }
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat(backgroundColor,textFormat)"
+                }
+            },
+            # Add borders
+            {
+                "updateBorders": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": 0,
+                        "endRowIndex": current_row + 1,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": 9
+                    },
+                    "top": {"style": "SOLID"},
+                    "bottom": {"style": "SOLID"},
+                    "left": {"style": "SOLID"},
+                    "right": {"style": "SOLID"},
+                    "innerHorizontal": {"style": "SOLID"},
+                    "innerVertical": {"style": "SOLID"}
+                }
+            },
+            # Auto-resize columns
+            {
+                "autoResizeDimensions": {
+                    "dimensions": {
+                        "sheetId": 0,
+                        "dimension": "COLUMNS",
+                        "startIndex": 0,
+                        "endIndex": 9
+                    }
+                }
+            },
+            # Format price column as currency
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": 1,
+                        "endRowIndex": current_row + 1,
+                        "startColumnIndex": 7,
+                        "endColumnIndex": 8
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "numberFormat": {
+                                "type": "CURRENCY",
+                                "pattern": "$#,##0.00"
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat.numberFormat"
+                }
+            },
+            # Freeze header row
+            {
+                "updateSheetProperties": {
+                    "properties": {
+                        "sheetId": 0,
+                        "gridProperties": {
+                            "frozenRowCount": 1
+                        }
+                    },
+                    "fields": "gridProperties.frozenRowCount"
+                }
+            }
+        ]
+
+        # Apply all formatting
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=SPREADSHEET_ID,
+            body={"requests": requests}
+        ).execute()
+
+        logger.info("Successfully formatted sheet")
         return True
     except Exception as e:
         logger.error(f"Error appending to sheet: {str(e)}")

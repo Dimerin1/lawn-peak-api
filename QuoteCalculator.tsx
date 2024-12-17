@@ -45,6 +45,18 @@ const inputStyle = {
     outline: "none",
 };
 
+const errorStyle = {
+    fontSize: '12px',
+    color: '#1f2937',
+    marginTop: '4px',
+    marginLeft: '4px'
+};
+
+const getInputStyle = (hasError) => ({
+    ...inputStyle,
+    border: hasError ? '1px solid #ef4444' : 'none',
+});
+
 const selectStyle = {
     ...inputStyle,
     appearance: "none",
@@ -172,25 +184,25 @@ const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, 
             )}
 
             <button
+                className="add-payment-button"
                 onClick={handlePayment}
                 disabled={isProcessingPayment}
-                className={`w-full py-3 px-4 rounded-lg text-white font-semibold transition-all duration-200 ${
-                    isProcessingPayment 
-                        ? 'bg-green-400 cursor-wait'
-                        : 'bg-green-600 hover:bg-green-700'
-                }`}
+                style={{
+                    width: '100%',
+                    height: '60px',
+                    backgroundColor: '#F7C35F',
+                    color: '#000000',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontSize: '17px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontFamily: 'Inter',
+                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                    transition: 'all 0.2s ease',
+                }}
             >
-                {isProcessingPayment ? (
-                    <span className="flex items-center justify-center">
-                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Redirecting to payment...
-                    </span>
-                ) : (
-                    'Add Payment Method'
-                )}
+                {isProcessingPayment ? "Setting up payment..." : "Add Payment Method"}
             </button>
             <div style={{ 
                 textAlign: 'center', 
@@ -246,6 +258,13 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         return tomorrow;
     });
     const [currentStep, setCurrentStep] = React.useState(1);
+    const [showRequiredError, setShowRequiredError] = React.useState(false);
+    const [fieldErrors, setFieldErrors] = React.useState({
+        address: false,
+        lotSize: false,
+        service: false,
+        phone: false
+    });
 
     const formatDateForDisplay = (date) => {
         const month = date.toLocaleString('en-US', { month: 'short' });
@@ -325,20 +344,6 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         }
     }
 
-    const API_URL = 'https://lawn-peak-api.onrender.com'
-
-    const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 2) => {
-        for (let i = 0; i < maxRetries; i++) {
-            try {
-                const response = await fetch(url, options)
-                if (response.ok) return response
-            } catch (error) {
-                if (i === maxRetries - 1) throw error
-            }
-        }
-        throw new Error('All retries failed')
-    }
-
     const getQuote = async (lotSize: string, service: string) => {
         try {
             setIsLoading(true)
@@ -376,29 +381,24 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
     };
 
     const handlePayment = async () => {
+        // Update field errors
+        const errors = {
+            address: !formData.address,
+            lotSize: !formData.lotSize,
+            service: !formData.service,
+            phone: !formData.phone || formData.phone.length < 10
+        };
+        setFieldErrors(errors);
+
+        if (!isFormValid()) {
+            return;
+        }
         setIsProcessingPayment(true)
         setPaymentError(null)
 
         try {
-            // Start Google Sheets submission in background immediately
-            fetch(`${API_URL}/submit-quote-async`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    name: formData.name || '',
-                    email: formData.email || '',
-                    service_type: formData.service,
-                    phone: formData.phone || '',
-                    address: formData.address,
-                    lot_size: formData.lotSize,
-                    price: formData.price,
-                }),
-            }).catch(console.error) // Don't wait for response, just log errors
-
-            // Create Stripe setup intent immediately after starting sheets submission
-            const stripeResponse = await fetch(`${API_URL}/create-setup-intent`, {
+            // First create Stripe setup intent for instant redirect
+            const response = await fetch('https://lawn-peak-api.onrender.com/create-setup-intent', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -418,17 +418,38 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 }),
             })
 
-            if (!stripeResponse.ok) {
+            if (!response.ok) {
                 throw new Error('Failed to create setup intent')
             }
 
-            const data = await stripeResponse.json()
+            const data = await response.json()
+
+            // Submit to Google Sheets asynchronously - don't wait for response
+            fetch('https://api.lawnpeak.com/submit-quote', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: formData.name || '',
+                    email: formData.email || '',
+                    service_type: formData.service,
+                    phone: formData.phone || '',
+                    address: formData.address,
+                    lot_size: formData.lotSize,
+                    price: formData.price,
+                }),
+            }).catch(error => {
+                console.error('Failed to submit to Google Sheets:', error)
+                // Don't show error to user since payment setup succeeded
+            })
 
             // Redirect to Stripe immediately
             window.location.href = data.setupIntentUrl
         } catch (error) {
             console.error('Payment setup error:', error)
             setPaymentError('Failed to set up payment. Please try again.')
+        } finally {
             setIsProcessingPayment(false)
         }
     };
@@ -471,17 +492,15 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         }
     };
 
-    React.useEffect(() => {
-        // Pre-fetch API health on component mount
-        const preFetchAPI = async () => {
-            try {
-                await fetch(`${API_URL}/test-stripe`)
-            } catch (error) {
-                console.error('API pre-fetch failed:', error)
-            }
-        }
-        preFetchAPI()
-    }, [])
+    const isFormValid = () => {
+        return !!(
+            formData.address &&
+            formData.lotSize &&
+            formData.service &&
+            formData.phone &&
+            formData.phone.length >= 10 // Basic phone validation
+        );
+    };
 
     return (
         <div style={{
@@ -501,13 +520,18 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     }}
                     placeholder="Address"
                 />
+                {fieldErrors.address && (
+                    <div style={errorStyle}>
+                        Please enter your address
+                    </div>
+                )}
             </div>
 
             <div className="input-group">
                 <select 
                     value={formData.lotSize}
                     onChange={handleLotSizeChange}
-                    style={selectStyle}
+                    style={getInputStyle(fieldErrors.lotSize)}
                 >
                     <option value="" disabled selected>Select lot size</option>
                     {lotSizeOptions.map(option => (
@@ -516,13 +540,18 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                         </option>
                     ))}
                 </select>
+                {fieldErrors.lotSize && (
+                    <div style={errorStyle}>
+                        Please select your lot size
+                    </div>
+                )}
             </div>
 
             <div className="input-group">
                 <select 
                     value={formData.service}
                     onChange={handleServiceChange}
-                    style={selectStyle}
+                    style={getInputStyle(fieldErrors.service)}
                 >
                     <option value="" disabled selected>Select your service</option>
                     {serviceTypes.map(option => (
@@ -531,91 +560,33 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                         </option>
                     ))}
                 </select>
-            </div>
-
-            {formData.lotSize && formData.service && (
-                <div className="input-group">
-                    <div className="date-input-container">
-                        <div 
-                            className="date-input"
-                            onClick={() => setShowCalendar(!showCalendar)}
-                        >
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M19 4H5C3.89543 4 3 4.89543 3 6V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V6C21 4.89543 20.1046 4 19 4Z" stroke="#666666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                <path d="M16 2V6" stroke="#666666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                <path d="M8 2V6" stroke="#666666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                <path d="M3 10H21" stroke="#666666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                            {formData.startDate || "Preferred Start Date"}
-                        </div>
-                        {showCalendar && (
-                            <div className="calendar-dropdown">
-                                <div className="calendar-header">
-                                    <button className="nav-button">&lt;</button>
-                                    <span>Dec 2024</span>
-                                    <button className="nav-button">&gt;</button>
-                                </div>
-                                <div className="calendar-weekdays">
-                                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                                        <div key={day} className="weekday">{day}</div>
-                                    ))}
-                                </div>
-                                <div className="calendar-days">
-                                    {Array.from({ length: 31 }, (_, i) => i + 1).map(day => {
-                                        const date = new Date(2024, 11, day);
-                                        const isPastDate = date < new Date().setHours(0, 0, 0, 0);
-                                        const isSelected = selectedDate && 
-                                            date.getDate() === selectedDate.getDate() &&
-                                            date.getMonth() === selectedDate.getMonth() &&
-                                            date.getFullYear() === selectedDate.getFullYear();
-
-                                        return (
-                                            <div 
-                                                key={day}
-                                                className={`calendar-day ${isPastDate ? 'past' : ''} ${isSelected ? 'selected' : ''}`}
-                                                onClick={() => !isPastDate && handleDateSelect(day)}
-                                            >
-                                                {day}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
+                {fieldErrors.service && (
+                    <div style={errorStyle}>
+                        Please select a service type
                     </div>
-                </div>
-            )}
+                )}
+            </div>
 
             <div className="input-group">
                 <input
                     type="tel"
-                    placeholder="Phone Number"
                     value={formData.phone}
                     onChange={handlePhoneChange}
-                    style={inputStyle}
+                    style={getInputStyle(fieldErrors.phone)}
+                    placeholder="Phone"
                 />
+                {fieldErrors.phone && (
+                    <div style={errorStyle}>
+                        {!formData.phone ? 'Please enter your phone number' : 'Phone number must be at least 10 digits'}
+                    </div>
+                )}
             </div>
-            {error && (
-                <div style={{
-                    color: "#e53e3e",
-                    padding: "12px",
-                    borderRadius: "8px",
-                    backgroundColor: "rgba(229, 62, 62, 0.1)",
-                    marginTop: "8px",
-                    fontSize: "14px",
-                    animation: "fadeIn 0.3s ease-out"
-                }}>
-                    {error}
-                </div>
-            )}
-
             {isLoading ? (
                 <div style={{
                     textAlign: "center",
-                    padding: "16px",
-                    color: "#718096"
+                    padding: "20px"
                 }}>
-                    Calculating price...
+                    Loading...
                 </div>
             ) : showPrice && (
                 <PriceDisplay 
