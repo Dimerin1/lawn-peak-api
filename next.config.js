@@ -10,10 +10,10 @@ const nextConfig = {
   },
   env: {
     NEXT_PUBLIC_API_URL: process.env.NODE_ENV === 'production' 
-      ? 'https://api.lawnpeak.com'
+      ? 'https://lawn-peak-api.onrender.com'
       : 'http://localhost:8080',
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
-    NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: 'AIzaSyDPMxdPl54WLri6kvQl6XNjVzTsXhuzOXw'
+    NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
   },
   async rewrites() {
     return [
@@ -21,7 +21,7 @@ const nextConfig = {
         source: '/api/:path*',
         destination: process.env.NODE_ENV === 'development'
           ? 'http://localhost:8080/:path*'
-          : 'https://api.lawnpeak.com/:path*'
+          : 'https://lawn-peak-api.onrender.com/:path*'
       }
     ]
   }

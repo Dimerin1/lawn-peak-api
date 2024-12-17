@@ -386,7 +386,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
             address: !formData.address,
             lotSize: !formData.lotSize,
             service: !formData.service,
-            phone: !formData.phone || formData.phone.length < 10
+            phone: !formData.phone || formData.phone.length < 10 // Basic phone validation
         };
         setFieldErrors(errors);
 
@@ -398,7 +398,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
 
         try {
             // First create Stripe setup intent for instant redirect
-            const response = await fetch('https://lawn-peak-api.onrender.com/create-setup-intent', {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/create-setup-intent`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -968,53 +968,50 @@ addPropertyControls(QuoteCalculator, {
 })
 
 function AddressInput({ value, onChange, onSelect, style, placeholder }) {
-    const [address, setAddress] = React.useState("")
     const [addressError, setAddressError] = React.useState("")
     const [isLoadingAddress, setIsLoadingAddress] = React.useState(false)
-    const [isScriptLoaded, setIsScriptLoaded] = React.useState(false)
     const inputRef = React.useRef(null)
 
     React.useEffect(() => {
-        // Load Google Maps script if not already loaded
-        if (!window.google && !document.querySelector('script[src*="maps.googleapis.com"]')) {
-            const script = document.createElement('script')
-            script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.GOOGLE_MAPS_API_KEY}&libraries=places`
-            script.async = true
-            script.defer = true
-            script.onload = () => setIsScriptLoaded(true)
-            document.head.appendChild(script)
-        } else {
-            setIsScriptLoaded(true)
-        }
-    }, [])
+        let autocomplete = null;
+        const initAutocomplete = () => {
+            if (!window.google?.maps?.places) {
+                console.log("Waiting for Google Maps to load...");
+                setTimeout(initAutocomplete, 500);
+                return;
+            }
 
-    React.useEffect(() => {
-        if (isScriptLoaded && inputRef.current) {
-            const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
-                componentRestrictions: { country: "us" },
-                fields: ["formatted_address", "geometry"]
-            })
+            try {
+                if (inputRef.current && !autocomplete) {
+                    console.log("Initializing autocomplete...");
+                    autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
+                        componentRestrictions: { country: "us" },
+                        fields: ["formatted_address", "geometry"],
+                        types: ["address"]
+                    });
 
-            autocomplete.addListener("place_changed", async () => {
-                try {
-                    setIsLoadingAddress(true)
-                    setAddressError("")
-                    
-                    const place = autocomplete.getPlace()
-                    if (!place.formatted_address) {
-                        throw new Error("Invalid address selected")
-                    }
-
-                    setAddress(place.formatted_address)
-                    onSelect(place.formatted_address)
-                } catch (err) {
-                    setAddressError(err.message || "Error selecting address")
-                } finally {
-                    setIsLoadingAddress(false)
+                    autocomplete.addListener("place_changed", () => {
+                        const place = autocomplete.getPlace();
+                        if (place.formatted_address) {
+                            onSelect(place.formatted_address);
+                        }
+                    });
                 }
-            })
-        }
-    }, [isScriptLoaded])
+            } catch (error) {
+                console.error("Error initializing autocomplete:", error);
+                setAddressError("Error initializing address search");
+            }
+        };
+
+        initAutocomplete();
+
+        return () => {
+            if (autocomplete) {
+                window.google?.maps?.event?.clearInstanceListeners(autocomplete);
+            }
+        };
+    }, [onSelect]);
+
     return (
         <div style={{ width: "100%" }}>
             <div style={{ position: "relative" }}>

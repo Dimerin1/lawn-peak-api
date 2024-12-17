@@ -16,14 +16,28 @@ export default function Layout({ children }: LayoutProps) {
     });
 
     React.useEffect(() => {
-        // Load Google Maps script
-        if (typeof window.google === 'undefined') {
-            const script = document.createElement('script');
-            script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`;
-            script.async = true;
-            script.defer = true;
-            document.head.appendChild(script);
-        }
+        const loadGoogleMaps = () => {
+            if (typeof window !== 'undefined' && !window.google && !document.querySelector('#google-maps-script')) {
+                console.log("Loading Google Maps script...");
+                const script = document.createElement('script');
+                script.id = 'google-maps-script';
+                script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places&callback=initMap`;
+                script.async = true;
+                script.defer = true;
+                
+                window.initMap = function() {
+                    console.log("Google Maps script loaded successfully");
+                };
+
+                script.onerror = function() {
+                    console.error("Error loading Google Maps script");
+                };
+
+                document.head.appendChild(script);
+            }
+        };
+
+        loadGoogleMaps();
 
         const params = new URLSearchParams(window.location.search);
         const setupStatus = params.get('setup');
