@@ -181,15 +181,25 @@ def create_payment_intent():
         print('Error creating payment intent:', str(e))
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
-@app.route('/create-setup-intent', methods=['POST'])
+@app.route('/create-setup-intent', methods=['POST', 'OPTIONS'])
 def create_setup_intent():
+    # Handle CORS preflight request
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Stripe-Publishable-Key')
+        response.headers.add('Access-Control-Allow-Methods', 'POST')
+        return response
+
     try:
         data = request.get_json()
         
         # Validate Stripe publishable key
         stripe_publishable_key = request.headers.get('Stripe-Publishable-Key')
         if stripe_publishable_key != os.getenv('STRIPE_PUBLISHABLE_KEY'):
-            return jsonify({'error': 'Invalid Stripe publishable key'}), 401
+            response = jsonify({'error': 'Invalid Stripe publishable key'})
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            return response, 401
 
         # Create a new customer
         customer = stripe.Customer.create(
@@ -211,16 +221,22 @@ def create_setup_intent():
             cancel_url=data.get('cancel_url', request.host_url)
         )
 
-        return jsonify({
+        response = jsonify({
             'setupIntentUrl': session.url
         })
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
 
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error: {str(e)}")
-        return jsonify({'error': str(e)}), 400
+        response = jsonify({'error': str(e)})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 400
     except Exception as e:
         logger.error(f"Server error: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        response = jsonify({'error': 'Internal server error'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 500
 
 @app.route('/charge-customer', methods=['POST', 'OPTIONS'])
 def charge_customer():
