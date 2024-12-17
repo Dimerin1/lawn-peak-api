@@ -1087,6 +1087,30 @@ def internal_error(error):
         'message': str(error)
     }), 500
 
+def calculate_price(lot_size_range, service_type='ONE_TIME'):
+    # Base prices for different lot sizes
+    base_prices = {
+        'SMALL': 60,    # Up to 5,000 sq ft
+        'MEDIUM': 70,   # 5,000 - 10,000 sq ft
+        'LARGE': 75,    # 10,000 - 15,000 sq ft
+        'XLARGE': 80    # Over 15,000 sq ft
+    }
+    
+    # Service type discounts
+    service_discounts = {
+        'ONE_TIME': 0,      # No discount
+        'MONTHLY': 0,       # No discount
+        'BI_WEEKLY': 0.10,  # 10% discount
+        'WEEKLY': 0.20      # 20% discount
+    }
+    
+    base_price = base_prices.get(lot_size_range, base_prices['XLARGE'])
+    discount = service_discounts.get(service_type, 0)
+    
+    # Apply discount and round to nearest $5
+    final_price = base_price * (1 - discount)
+    return round(final_price / 5) * 5
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 8080))
     logger.info(f"Starting app on port {port}")
@@ -1125,25 +1149,3 @@ def get_lot_size(address):
     except Exception as e:
         print('Error in get_lot_size:', str(e))
         return None
-
-def calculate_price(lot_size_range, service_type='ONE_TIME'):
-    # Base prices for different service types
-    base_prices = {
-        'ONE_TIME': 50,
-        'BI_WEEKLY': 45,
-        'WEEKLY': 40
-    }
-    
-    # Size multipliers
-    size_multipliers = {
-        '0-5000': 1.0,
-        '5001-10000': 1.5,
-        '10001-15000': 2.0,
-        '15001-20000': 2.5,
-        '20001+': 3.0
-    }
-    
-    base_price = base_prices.get(service_type, base_prices['ONE_TIME'])
-    multiplier = size_multipliers.get(lot_size_range, size_multipliers['20001+'])
-    
-    return base_price * multiplier
