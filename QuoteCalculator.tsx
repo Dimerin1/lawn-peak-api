@@ -678,7 +678,13 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
 
         setIsValidatingReferral(true);
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/referral/validate`, {
+            const apiBaseUrl = process.env.NODE_ENV === 'development' 
+                ? 'http://localhost:5000'
+                : window.location.hostname.includes('staging')
+                    ? 'https://lawn-peak-api-staging.onrender.com'
+                    : 'https://lawn-peak-api.onrender.com';
+
+            const response = await fetch(`${apiBaseUrl}/api/referral/validate`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -690,19 +696,21 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
             });
 
             const data = await response.json();
-            if (response.ok) {
+            if (response.ok && data.valid) {
                 setReferralError("");
                 setReferralDiscount(data.discount);
                 // Update final price with discount
                 const discountedPrice = formData.price * (1 - data.discount);
                 setFormData(prev => ({ ...prev, price: discountedPrice }));
             } else {
-                setReferralError(data.error);
+                setReferralError(data.error || "Failed to validate referral code");
                 setReferralDiscount(0);
+                setFormData(prev => ({ ...prev, price: calculatePrice(prev.lotSize, prev.service) }));
             }
         } catch (error) {
             setReferralError("Failed to validate referral code");
             setReferralDiscount(0);
+            setFormData(prev => ({ ...prev, price: calculatePrice(prev.lotSize, prev.service) }));
         } finally {
             setIsValidatingReferral(false);
         }
