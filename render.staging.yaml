@@ -40,3 +40,13 @@ services:
         value: 3000
       - key: NEXT_PUBLIC_ENABLE_REFERRAL_SYSTEM
         value: true
+    buildFilter:
+      paths:
+      - .next/**
+      - components/**
+      - pages/**
+      - public/**
+      - styles/**
+      - package.json
+      - next.config.js
+      - tsconfig.json

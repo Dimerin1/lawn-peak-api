@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
+# Initialize database tables
+referral_db.init_referral_tables()
+
 # Initialize referral system database
 referral_db.init_referral_tables()
 
