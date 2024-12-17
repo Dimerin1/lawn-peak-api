@@ -43,9 +43,9 @@ logger.info("Flask app created")
 # Configure CORS
 CORS(app, resources={
     r"/*": {
-        "origins": ["*", "https://lawn-peak.framer.website"],
+        "origins": ["*", "https://lawnpeak.com", "https://www.lawnpeak.com"],
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "Stripe-Publishable-Key"],
+        "allow_headers": ["Content-Type", "Authorization", "Stripe-Publishable-Key", "Referer", "Sec-Ch-Ua", "User-Agent"],
         "expose_headers": ["Content-Type"],
         "max_age": 3600
     }
@@ -53,8 +53,12 @@ CORS(app, resources={
 
 @app.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Stripe-Publishable-Key')
+    origin = request.headers.get('Origin')
+    if origin in ['https://lawnpeak.com', 'https://www.lawnpeak.com']:
+        response.headers.add('Access-Control-Allow-Origin', origin)
+    else:
+        response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Stripe-Publishable-Key,Referer,Sec-Ch-Ua,User-Agent')
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
     return response
 
