@@ -16,8 +16,8 @@
 # Misc
 .DS_Store
 *.pem
-#.env
-# Temporarily commenting out .env for debugging
+.env
+google-credentials.json
 .env.local
 .env.development.local
 .env.test.local
