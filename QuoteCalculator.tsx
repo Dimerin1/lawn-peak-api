@@ -4,8 +4,8 @@ import { addPropertyControls, ControlType } from "framer"
 // Service configuration
 const SERVICES = {
     ONE_TIME: { name: "One-time mowing", discount: 0 },
-    WEEKLY: { name: "Weekly mowing", discount: 0.25 },
-    BI_WEEKLY: { name: "Bi-Weekly mowing", discount: 0.15 },
+    WEEKLY: { name: "Weekly mowing", discount: 0.20 },
+    BI_WEEKLY: { name: "Bi-Weekly mowing", discount: 0.10 },
     MONTHLY: { name: "Monthly mowing", discount: 0 }
 }
 
@@ -26,8 +26,8 @@ const lotSizeOptions = [
 const serviceTypes = [
     { value: 'ONE_TIME', label: 'One-time mowing' },
     { value: 'MONTHLY', label: 'Monthly mowing' },
-    { value: 'BI_WEEKLY', label: 'Bi-weekly mowing (Save 15%)' },
-    { value: 'WEEKLY', label: 'Weekly mowing (Save 25%)' }
+    { value: 'BI_WEEKLY', label: 'Bi-weekly mowing (Save 10%)' },
+    { value: 'WEEKLY', label: 'Weekly mowing (Save 20%)' }
 ];
 
 const inputStyle = {
@@ -58,6 +58,161 @@ const selectStyle = {
     cursor: "pointer",
 }
 
+const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, handlePayment }) => {
+    const isRecurring = serviceType !== 'ONE_TIME'
+    
+    const getServiceBadge = () => {
+        switch(serviceType) {
+            case 'ONE_TIME':
+                return { text: 'Quick Service', color: '#FF9800' }
+            case 'WEEKLY':
+                return { text: 'Best Value', color: '#4CAF50' }
+            case 'BI_WEEKLY':
+                return { text: 'Most Popular', color: '#4CAF50' }
+            case 'MONTHLY':
+                return { text: 'Flexible Service', color: '#2196F3' }
+            default:
+                return null
+        }
+    }
+
+    const getComparisonHint = () => {
+        switch(serviceType) {
+            case 'ONE_TIME':
+                return { text: 'Switch to weekly and save 20%', color: '#4CAF50' }
+            case 'MONTHLY':
+                return { text: 'Switch to bi-weekly and save 10%', color: '#4CAF50' }
+            default:
+                return null
+        }
+    }
+
+    const badge = getServiceBadge()
+    const hint = getComparisonHint()
+
+    return (
+        <div style={{
+            padding: '32px',
+            backgroundColor: 'white',
+            borderRadius: '20px',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
+            fontFamily: 'Be Vietnam Pro',
+            marginBottom: '16px', // Add margin to prevent shadow cutoff
+        }}>
+            {badge && (
+                <div style={{ 
+                    backgroundColor: badge.color, 
+                    color: 'white', 
+                    padding: '6px 12px', 
+                    borderRadius: '6px', 
+                    fontSize: '14px',
+                    display: 'inline-block',
+                    marginBottom: '16px',
+                    fontFamily: 'Be Vietnam Pro',
+                }}>
+                    {badge.text}
+                </div>
+            )}
+            
+            <div style={{ 
+                marginBottom: '24px',
+                textAlign: 'center'
+            }}>
+                {isRecurring ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+                        <span style={{ textDecoration: 'line-through', color: '#666', fontSize: '24px', fontFamily: 'Be Vietnam Pro' }}>${originalPrice}</span>
+                        <span style={{ fontSize: '36px', fontWeight: '600', color: '#333', fontFamily: 'Be Vietnam Pro' }}>${price}</span>
+                        {(serviceType === 'WEEKLY' || serviceType === 'BI_WEEKLY') && (
+                            <span style={{ 
+                                backgroundColor: '#4CAF50', 
+                                color: 'white', 
+                                padding: '4px 8px', 
+                                borderRadius: '6px', 
+                                fontSize: '14px',
+                                fontFamily: 'Be Vietnam Pro',
+                            }}>
+                                Save {serviceType === 'WEEKLY' ? '20%' : '10%'}
+                            </span>
+                        )}
+                    </div>
+                ) : (
+                    <div style={{ fontSize: '36px', fontWeight: '600', color: '#333', fontFamily: 'Be Vietnam Pro' }}>
+                        ${price}
+                    </div>
+                )}
+            </div>
+
+            <div style={{ 
+                fontSize: '14px', 
+                color: '#666', 
+                textAlign: 'left',
+                marginBottom: '24px',
+                backgroundColor: '#f8f8f8',
+                padding: '16px',
+                borderRadius: '12px',
+                fontFamily: 'Be Vietnam Pro',
+            }}>
+                <div style={{ marginBottom: '8px', fontWeight: '500', color: '#333' }}>Service includes:</div>
+                <div style={{ marginBottom: '8px' }}>✓ Professional mowing</div>
+                <div style={{ marginBottom: '8px' }}>✓ Edge trimming</div>
+                <div style={{ marginBottom: '8px' }}>✓ Grass clippings cleanup</div>
+            </div>
+
+            {hint && (
+                <div style={{ 
+                    fontSize: '14px', 
+                    color: hint.color, 
+                    textAlign: 'center',
+                    fontWeight: '500',
+                    marginBottom: '24px',
+                    fontFamily: 'Be Vietnam Pro',
+                }}>
+                    {hint.text}
+                </div>
+            )}
+
+            <button
+                onClick={handlePayment}
+                disabled={isProcessingPayment}
+                className={`w-full py-3 px-4 rounded-lg text-white font-semibold transition-all duration-200 ${
+                    isProcessingPayment 
+                        ? 'bg-green-400 cursor-wait'
+                        : 'bg-green-600 hover:bg-green-700'
+                }`}
+            >
+                {isProcessingPayment ? (
+                    <span className="flex items-center justify-center">
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Redirecting to payment...
+                    </span>
+                ) : (
+                    'Add Payment Method'
+                )}
+            </button>
+            <div style={{ 
+                textAlign: 'center', 
+                marginTop: '12px', 
+                fontSize: '14px', 
+                color: '#666',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
+                fontFamily: 'Be Vietnam Pro',
+            }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0110 0v4"/>
+                </svg>
+                Secure payment powered by Stripe
+            </div>
+        </div>
+    )
+}
+
 function QuoteCalculator({ onPriceChange, onServiceChange }) {
     const getTomorrowFormatted = () => {
         const tomorrow = new Date();
@@ -77,50 +232,20 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         phone: "",
         quoteId: null,
         startDate: ""
-    })
+    });
     const [priceDisplay, setPriceDisplay] = React.useState("")
     const [error, setError] = React.useState("")
     const [isLoading, setIsLoading] = React.useState(false)
-    const [isProcessingPayment, setIsProcessingPayment] = React.useState(false)
-    const [paymentError, setPaymentError] = React.useState("")
+    const [isProcessingPayment, setIsProcessingPayment] = React.useState(false);
+    const [paymentError, setPaymentError] = React.useState("");
     const [showPrice, setShowPrice] = React.useState(false)
     const [showCalendar, setShowCalendar] = React.useState(false)
-    const [showThankYou, setShowThankYou] = React.useState(false)
     const [selectedDate, setSelectedDate] = React.useState(() => {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         return tomorrow;
     });
-
-    // Check for success parameter ONLY on initial mount
-    React.useEffect(() => {
-        try {
-            const params = new URLSearchParams(window.location.search);
-            console.log('URL Parameters:', Object.fromEntries(params.entries()));
-            
-            const setupStatus = params.get('setup');
-            const customerId = params.get('customer_id');
-            
-            console.log('Setup Status:', setupStatus);
-            console.log('Customer ID:', customerId);
-            
-            // Show thank you message if setup was successful and we have any customer ID
-            if (setupStatus === 'success' && customerId) {
-                console.log('Showing thank you message');
-                setShowThankYou(true);
-                // Auto-hide after 10 seconds
-                setTimeout(() => {
-                    setShowThankYou(false);
-                    // Clear URL parameters
-                    window.history.replaceState({}, '', window.location.pathname);
-                }, 10000);
-            } else {
-                console.log('Conditions not met:', { setupStatus, customerId });
-            }
-        } catch (error) {
-            console.error('Error checking success:', error);
-        }
-    }, []); // Empty dependency array means this only runs once on mount
+    const [currentStep, setCurrentStep] = React.useState(1);
 
     const formatDateForDisplay = (date) => {
         const month = date.toLocaleString('en-US', { month: 'short' });
@@ -162,32 +287,25 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
             throw new Error("Invalid lot size")
         }
         
-        // New pricing tiers based on lot size
-        let basePrice = 40; // Minimum price
+        // Base pricing for each tier with 100% margin for one-time
+        let basePrice = 0;
         
         if (lotSize === 'SMALL') {
-            basePrice += 5000 * 0.008;
+            basePrice = 60; // $30 cost -> 100% margin
         } else if (lotSize === 'MEDIUM') {
-            basePrice += (5000 * 0.008) + (4000 * 0.006);
+            basePrice = 70; // $35 cost -> 100% margin
         } else if (lotSize === 'LARGE') {
-            basePrice += (5000 * 0.008) + (4000 * 0.006) + (2000 * 0.004);
+            basePrice = 75; // $35-38 cost -> ~100% margin
         } else {
-            basePrice += (5000 * 0.008) + (4000 * 0.006) + (2000 * 0.004) + (10000 * 0.002);
+            basePrice = 80; // $40 cost -> 100% margin
         }
+
+        // Apply service type discounts
+        const serviceDiscount = SERVICES[service].discount;
+        const discountedPrice = basePrice * (1 - serviceDiscount);
         
-        // Apply discount if applicable
-        const serviceConfig = SERVICES[service]
-        if (!serviceConfig) {
-            throw new Error("Invalid service selected")
-        }
-        
-        const price = Math.round(basePrice)
-        
-        if (serviceConfig.discount > 0) {
-            return Math.round(price * (1 - serviceConfig.discount))
-        }
-        
-        return price
+        // Round to nearest $5
+        return Math.round(discountedPrice / 5) * 5;
     }
 
     const handleLotSizeChange = (e) => {
@@ -205,6 +323,20 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         if (formData.lotSize && value) {
             getQuote(formData.lotSize, value)
         }
+    }
+
+    const API_URL = 'https://lawn-peak-api.onrender.com'
+
+    const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 2) => {
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                const response = await fetch(url, options)
+                if (response.ok) return response
+            } catch (error) {
+                if (i === maxRetries - 1) throw error
+            }
+        }
+        throw new Error('All retries failed')
     }
 
     const getQuote = async (lotSize: string, service: string) => {
@@ -227,96 +359,77 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
             localStorage.setItem('quoteData', JSON.stringify(quoteData))
             
             // Update state
-            setPriceDisplay(`$${calculatedPrice}`)
             setFormData(prev => ({ 
                 ...prev, 
                 price: calculatedPrice,
-                service: service,
-                lotSize: lotSize
+                showPrice: true // Ensure price is always shown after calculation
             }))
-            setShowPrice(true)
             
-        } catch (err) {
-            console.error("Quote error:", err)
-            setError("Failed to calculate quote. Please try again.")
-            setPriceDisplay("")
-            setFormData(prev => ({ 
-                ...prev, 
-                price: null
-            }))
-            localStorage.removeItem('quoteData')
+            onPriceChange?.(calculatedPrice)
+            setShowPrice(true) // Ensure price is always shown
+        } catch (error) {
+            console.error('Error getting quote:', error)
+            setError("Failed to get quote. Please try again.")
         } finally {
             setIsLoading(false)
         }
     };
 
     const handlePayment = async () => {
-        if (isProcessingPayment) return;
-        
+        setIsProcessingPayment(true)
+        setPaymentError(null)
+
         try {
-            setIsProcessingPayment(true);
-            setPaymentError("");
-            
-            const storedQuoteData = localStorage.getItem('quoteData');
-            const quoteData = storedQuoteData ? JSON.parse(storedQuoteData) : null;
-            
-            if (!quoteData || !quoteData.price) {
-                throw new Error('Please select lot size and service to get a quote first');
-            }
-
-            const customerName = localStorage.getItem('customerName');
-
-            // Submit to sheets in background without blocking
-            fetch('https://lawn-peak-api.onrender.com/submit-quote', {
+            // Start Google Sheets submission in background immediately
+            fetch(`${API_URL}/submit-quote-async`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    name: customerName || '',
-                    email: '',
+                    name: formData.name || '',
+                    email: formData.email || '',
                     service_type: formData.service,
-                    phone: formData.phone,
+                    phone: formData.phone || '',
                     address: formData.address,
                     lot_size: formData.lotSize,
-                    price: quoteData.price,
-                    payment_status: 'pending',
-                    start_date: formData.startDate
-                })
-            }).catch(console.error); // Silent fail
-            
-            // Create setup intent immediately
-            const response = await fetch('https://lawn-peak-api.onrender.com/create-setup-intent', {
+                    price: formData.price,
+                }),
+            }).catch(console.error) // Don't wait for response, just log errors
+
+            // Create Stripe setup intent immediately after starting sheets submission
+            const stripeResponse = await fetch(`${API_URL}/create-setup-intent`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
+                    return_url: window.location.origin + window.location.pathname,
                     quoteData: {
-                        ...formData,
-                        price: calculatePrice(formData.lotSize, formData.service),
-                        startDate: selectedDate.toISOString(),
-                    },
-                    return_url: 'https://fabulous-screenshot-716470.framer.app', // Base URL only, no parameters
-                    test_mode: process.env.NODE_ENV !== 'production' // Tell backend we're in test mode
-                })
-            });
+                        price: formData.price,
+                        service: formData.service,
+                        address: formData.address,
+                        lotSize: formData.lotSize,
+                        date: formData.startDate,
+                        name: formData.name,
+                        email: formData.email,
+                        phone: formData.phone,
+                    }
+                }),
+            })
 
-            const data = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(data.error || 'Failed to setup payment method');
+            if (!stripeResponse.ok) {
+                throw new Error('Failed to create setup intent')
             }
-            
-            if (data.setupIntentUrl) {
-                window.location.href = data.setupIntentUrl;
-            } else {
-                throw new Error('No setup URL received');
-            }
-            
+
+            const data = await stripeResponse.json()
+
+            // Redirect to Stripe immediately
+            window.location.href = data.setupIntentUrl
         } catch (error) {
-            setPaymentError(error.message || 'Failed to proceed to payment');
-            setIsProcessingPayment(false);
+            console.error('Payment setup error:', error)
+            setPaymentError('Failed to set up payment. Please try again.')
+            setIsProcessingPayment(false)
         }
     };
 
@@ -358,60 +471,24 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         }
     };
 
-    return (
-        <div
-            style={{
-                width: "100%",
-                display: "flex",
-                flexDirection: "column",
-                gap: "16px",
-            }}
-        >
-            {showThankYou && (
-                <div 
-                    style={{
-                        backgroundColor: "#4CAF50",
-                        color: "white",
-                        padding: "24px",
-                        borderRadius: "12px",
-                        textAlign: "center",
-                        position: "fixed",
-                        top: "50%",
-                        left: "50%",
-                        transform: "translate(-50%, -50%)",
-                        zIndex: 9999,
-                        boxShadow: "0 8px 16px rgba(0, 0, 0, 0.2)",
-                        width: "90%",
-                        maxWidth: "500px",
-                        animation: "fadeIn 0.5s ease-out"
-                    }}
-                >
-                    <h2 style={{ fontSize: "28px", marginBottom: "16px", fontWeight: "600" }}>Thank You!</h2>
-                    <p style={{ fontSize: "18px", lineHeight: "1.6" }}>
-                        Your payment method has been successfully set up. We'll charge your card after the service is completed.
-                    </p>
-                    <button 
-                        onClick={() => {
-                            setShowThankYou(false);
-                            // Clear URL parameters after closing
-                            window.history.replaceState({}, '', window.location.pathname);
-                        }}
-                        style={{
-                            marginTop: "20px",
-                            padding: "10px 20px",
-                            backgroundColor: "white",
-                            color: "#4CAF50",
-                            border: "none",
-                            borderRadius: "6px",
-                            cursor: "pointer",
-                            fontWeight: "500"
-                        }}
-                    >
-                        Close
-                    </button>
-                </div>
-            )}
+    React.useEffect(() => {
+        // Pre-fetch API health on component mount
+        const preFetchAPI = async () => {
+            try {
+                await fetch(`${API_URL}/test-stripe`)
+            } catch (error) {
+                console.error('API pre-fetch failed:', error)
+            }
+        }
+        preFetchAPI()
+    }, [])
 
+    return (
+        <div style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "16px",
+        }}>
             <div className="input-group">
                 <AddressInput
                     value={formData.address}
@@ -541,53 +618,13 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     Calculating price...
                 </div>
             ) : showPrice && (
-                <div className="price-container">
-                    {(formData.service === "WEEKLY" || formData.service === "BI_WEEKLY") && (
-                        <>
-                            <div className="info-icon" title="Hover for commitment details">!</div>
-                            <div className="info-tooltip">
-                                *Discount applies with 2-month minimum commitment.
-                                Early cancellation will be billed at standard rate.
-                            </div>
-                        </>
-                    )}
-                    <div className="price-section">
-                        {(formData.service === "WEEKLY" || formData.service === "BI_WEEKLY") && (
-                            <span className="original-price">
-                                ${calculatePrice(formData.lotSize, 'ONE_TIME')}
-                            </span>
-                        )}
-                        <div className="price-amount">
-                            ${formData.service ? 
-                                Math.round(formData.price * (1 - (SERVICES[formData.service]?.discount || 0))) 
-                                : formData.price}
-                        </div>
-                        {(formData.service === "WEEKLY" || formData.service === "BI_WEEKLY") && (
-                            <div className="savings-badge">
-                                Save {SERVICES[formData.service].discount * 100}%
-                            </div>
-                        )}
-                    </div>
-                    <button 
-                        className="add-payment-button"
-                        onClick={handlePayment}
-                        disabled={isProcessingPayment}
-                    >
-                        {isProcessingPayment ? "Setting up payment..." : "Add Payment Method"}
-                    </button>
-                    {paymentError && (
-                        <div style={{ color: "#e53e3e", marginTop: "8px", fontSize: "14px" }}>
-                            {paymentError}
-                        </div>
-                    )}
-                    <div className="trust-message">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                            <path d="M7 11V7a5 5 0 0110 0v4"/>
-                        </svg>
-                        Secure payment powered by Stripe
-                    </div>
-                </div>
+                <PriceDisplay 
+                    price={formData.price} 
+                    serviceType={formData.service} 
+                    originalPrice={calculatePrice(formData.lotSize, 'ONE_TIME')} 
+                    isProcessingPayment={isProcessingPayment}
+                    handlePayment={handlePayment}
+                />
             )}
 
             <style>
