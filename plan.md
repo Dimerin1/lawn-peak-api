@@ -83,6 +83,9 @@ A complete solution for integrating address-based quotes and Stripe payment proc
 - Customer charging works with proper timestamps
 - Quote data is automatically stored in Google Sheets
 - Multi-step form properly collects and stores all customer information
+- Clear indication of customers with payment methods in Admin Dashboard
+- Proper price display and formatting in Admin Dashboard
+- Added ability to delete all customers at once
 
 ### Next Steps
 1. Test payment flow with live keys in production
@@ -105,9 +108,76 @@ A complete solution for integrating address-based quotes and Stripe payment proc
 5. Added CORS support for local development
 6. Implemented detailed logging for debugging
 7. Added timestamp tracking for customer charges
+8. Implemented Meta Pixel tracking events:
+   - ViewContent: Triggers when quote calculator loads
+   - AddToCart: Triggers when quote is generated
+   - InitiateCheckout: Triggers when user starts payment process
 
 ### Known Issues
 - None at the moment - core functionality is working as expected
+
+## Progress Log
+
+### December 20, 2024
+1. Admin Dashboard Enhancements
+   - Added visual indicator for customers with payment methods
+   - Fixed price display and formatting issues
+   - Added "Delete All Customers" functionality
+   - Added error boundary components for better error handling
+   - Improved error notifications and feedback
+
+2. Backend Improvements
+   - Enhanced price validation and formatting
+   - Added better error logging for Stripe operations
+   - Fixed customer metadata handling
+   - Added proper validation for required fields
+   - Improved error responses for better debugging
+
+3. Error Handling
+   - Added ErrorBoundary component for React errors
+   - Added error notifications in Layout component
+   - Improved error logging in backend
+   - Better validation of customer data
+
+### December 17, 2023
+1. Meta Pixel Implementation:
+   - Added Meta Pixel tracking events in QuoteCalculator component
+   - ViewContent event tracks when users load the calculator
+   - AddToCart event tracks when users generate a quote
+   - InitiateCheckout event tracks when users start payment process
+   - Included relevant parameters for each event:
+     - Currency (USD)
+     - Value (quote price)
+     - Content name (service type)
+     - Content category (Lawn Service)
+     - Content type (lot size)
+     - Content IDs (address)
+     - Number of items
+
+### December 17, 2023
+1. UI Improvements:
+   - Redesigned service type badges to use corner ribbons
+   - Moved badges to top-left corner of price cards
+   - Updated color scheme:
+     - Standardized green color to #34C759 across all elements
+     - Changed Quick Service badge to purple (#8E44AD) to avoid competing with orange CTA button
+     - Kept Best Value and Most Popular badges in green
+     - Maintained Flexible Service badge in blue
+   - Improved badge positioning and styling to prevent overlap with other elements
+   - Ensured consistent visual hierarchy across all service types
+
+2. Color Standardization:
+   - Updated all green elements to use #34C759:
+     - Save percentage badges
+     - Switch service messages
+     - Calendar selected day
+     - Trust message icons
+     - Other UI elements
+
+3. Design Decisions:
+   - Kept orange color exclusive to CTA buttons for better conversion
+   - Used distinct colors for service badges to improve visual categorization
+   - Maintained consistent styling across all interactive elements
 
 ## Components Structure
 

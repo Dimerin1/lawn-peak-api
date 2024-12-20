@@ -1,8 +1,49 @@
 import * as React from "react"
 import axios from 'axios'
+import {
+    Box,
+    Button,
+    Card,
+    CardContent,
+    Container,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogContentText,
+    DialogTitle,
+    FormControl,
+    Grid,
+    IconButton,
+    InputAdornment,
+    InputLabel,
+    MenuItem,
+    Paper,
+    Select,
+    Stack,
+    Table,
+    TableBody,
+    TableCell,
+    TableContainer,
+    TableHead,
+    TableRow,
+    TextField,
+    Typography,
+    Alert,
+    Snackbar,
+    CircularProgress
+} from '@mui/material'
+import {
+    Delete as DeleteIcon,
+    Edit as EditIcon,
+    Search as SearchIcon,
+    Sort as SortIcon,
+    Refresh as RefreshIcon,
+    Payment as PaymentIcon
+} from '@mui/icons-material'
 
 interface Customer {
     id: string
+    email: string
     metadata: {
         service_type: string
         payment_type: string
@@ -16,6 +57,13 @@ interface Customer {
     created: number
     has_payment_method: boolean
     charged: boolean
+}
+
+interface EditDialogState {
+    open: boolean
+    customer: Customer | null
+    newServiceType: string
+    newPrice: string
 }
 
 function AdminDashboard() {
@@ -32,6 +80,16 @@ function AdminDashboard() {
     const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc')
     const [filterPaymentType, setFilterPaymentType] = React.useState<'all' | 'one_time' | 'recurring'>('all')
     const [refreshKey, setRefreshKey] = React.useState(0)
+    const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
+    const [customerToDelete, setCustomerToDelete] = React.useState<Customer | null>(null)
+    const [deleteAllDialogOpen, setDeleteAllDialogOpen] = React.useState(false)
+    const [editDialog, setEditDialog] = React.useState<EditDialogState>({
+        open: false,
+        customer: null,
+        newServiceType: '',
+        newPrice: ''
+    })
+    const [snackbar, setSnackbar] = React.useState({ open: false, message: '', severity: 'success' as 'success' | 'error' })
 
     // API configuration
     const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL
@@ -112,48 +170,6 @@ function AdminDashboard() {
         }
     }, [refreshKey, isAuthenticated])
 
-    React.useEffect(() => {
-        let result = [...customers]
-        
-        // Apply payment type filter
-        if (filterPaymentType !== 'all') {
-            result = result.filter(customer => 
-                customer.metadata.payment_type === filterPaymentType
-            )
-        }
-        
-        // Apply search filter
-        if (searchTerm) {
-            result = result.filter(customer => 
-                customer.metadata.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                customer.metadata.service_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                customer.metadata.phone.includes(searchTerm)
-            )
-        }
-        
-        // Apply sorting
-        result.sort((a, b) => {
-            switch (sortBy) {
-                case 'date':
-                    return sortOrder === 'asc' 
-                        ? a.created - b.created 
-                        : b.created - a.created
-                case 'price':
-                    return sortOrder === 'asc'
-                        ? parseFloat(a.metadata.price) - parseFloat(b.metadata.price)
-                        : parseFloat(b.metadata.price) - parseFloat(a.metadata.price)
-                case 'status':
-                    return sortOrder === 'asc'
-                        ? (a.charged === b.charged ? 0 : a.charged ? 1 : -1)
-                        : (a.charged === b.charged ? 0 : a.charged ? -1 : 1)
-                default:
-                    return 0
-            }
-        })
-        
-        setFilteredCustomers(result)
-    }, [customers, searchTerm, sortBy, sortOrder, filterPaymentType])
-
     // Handle charging customer
     const handleChargeCustomer = async (customerId: string, amount: number) => {
         if (!customerId || amount <= 0) {
@@ -212,25 +228,140 @@ function AdminDashboard() {
         }
     }
 
-    const handleDeleteAllCustomers = async () => {
-        if (!window.confirm('Are you sure you want to delete ALL customers? This cannot be undone!')) {
-            return
-        }
+    // Handle customer deletion
+    const handleDeleteCustomer = async () => {
+        if (!customerToDelete) return
 
         try {
-            const response = await axios.post(`${API_BASE_URL}/delete-all-customers`, {}, axiosConfig)
-
-            if (!response.data.success) {
-                throw new Error('Failed to delete customers')
+            setLoading(true)
+            const response = await axios.delete(
+                `${API_BASE_URL}/delete-customer/${customerToDelete.id}`,
+                axiosConfig
+            )
+            
+            if (response.data.success) {
+                setSuccess('Customer deleted successfully')
+                setCustomers(prev => prev.filter(c => c.id !== customerToDelete.id))
+                setDeleteDialogOpen(false)
+                setCustomerToDelete(null)
             }
-
-            // Refresh the customer list
-            setRefreshKey(prev => prev + 1)
         } catch (err) {
-            console.error('Error deleting customers:', err)
-            alert(err instanceof Error ? err.message : 'Failed to delete customers')
+            setError('Failed to delete customer')
+            console.error('Delete error:', err)
+        } finally {
+            setLoading(false)
         }
     }
+
+    // Handle delete all customers
+    const handleDeleteAllCustomers = async () => {
+        try {
+            const response = await axios.delete(`${API_BASE_URL}/delete-all-customers`, axiosConfig)
+            if (response.data.success) {
+                setSnackbar({
+                    open: true,
+                    message: 'All customers deleted successfully',
+                    severity: 'success'
+                })
+                fetchCustomers() // Refresh the list
+            }
+        } catch (error) {
+            console.error('Error deleting all customers:', error)
+            setSnackbar({
+                open: true,
+                message: 'Failed to delete all customers',
+                severity: 'error'
+            })
+        }
+        setDeleteAllDialogOpen(false)
+    }
+
+    // Handle service update
+    const handleUpdateService = async () => {
+        if (!editDialog.customer) return
+
+        try {
+            setLoading(true)
+            const response = await axios.post(
+                `${API_BASE_URL}/update-customer-service`,
+                {
+                    customer_id: editDialog.customer.id,
+                    service_type: editDialog.newServiceType,
+                    price: parseFloat(editDialog.newPrice)
+                },
+                axiosConfig
+            )
+            
+            if (response.data.success) {
+                setSuccess('Customer service updated successfully')
+                setCustomers(prev => prev.map(c => 
+                    c.id === editDialog.customer?.id
+                        ? {
+                            ...c,
+                            metadata: {
+                                ...c.metadata,
+                                service_type: editDialog.newServiceType,
+                                price: editDialog.newPrice
+                            }
+                        }
+                        : c
+                ))
+                setEditDialog({
+                    open: false,
+                    customer: null,
+                    newServiceType: '',
+                    newPrice: ''
+                })
+            }
+        } catch (err) {
+            setError('Failed to update customer service')
+            console.error('Update error:', err)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    React.useEffect(() => {
+        let result = [...customers]
+        
+        // Apply payment type filter
+        if (filterPaymentType !== 'all') {
+            result = result.filter(customer => 
+                customer.metadata.payment_type === filterPaymentType
+            )
+        }
+        
+        // Apply search filter
+        if (searchTerm) {
+            result = result.filter(customer => 
+                customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                customer.metadata.service_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                customer.metadata.phone.includes(searchTerm)
+            )
+        }
+        
+        // Apply sorting
+        result.sort((a, b) => {
+            switch (sortBy) {
+                case 'date':
+                    return sortOrder === 'asc' 
+                        ? a.created - b.created 
+                        : b.created - a.created
+                case 'price':
+                    return sortOrder === 'asc'
+                        ? parseFloat(a.metadata.price) - parseFloat(b.metadata.price)
+                        : parseFloat(b.metadata.price) - parseFloat(a.metadata.price)
+                case 'status':
+                    return sortOrder === 'asc'
+                        ? (a.charged === b.charged ? 0 : a.charged ? 1 : -1)
+                        : (a.charged === b.charged ? 0 : a.charged ? -1 : 1)
+                default:
+                    return 0
+            }
+        })
+        
+        setFilteredCustomers(result)
+    }, [customers, searchTerm, sortBy, sortOrder, filterPaymentType])
 
     const formatPrice = (price: string | undefined): string => {
         if (!price) return '$0.00'
@@ -238,337 +369,368 @@ function AdminDashboard() {
         return isNaN(numericPrice) ? '$0.00' : `$${numericPrice.toFixed(2)}`
     }
 
-    const renderCustomerCard = (customer: Customer) => {
-        const isCharging = chargingCustomerId === customer.id
-        const isRecurring = customer.metadata.payment_type === 'recurring' || 
-                           customer.metadata.payment_type === 'WEEKLY' || 
-                           customer.metadata.payment_type === 'BI_WEEKLY'
-        
-        return (
-            <div key={customer.id} style={{
-                border: '1px solid #E2E8F0',
-                borderRadius: '8px',
-                padding: '16px',
-                marginBottom: '16px',
-                backgroundColor: 'white'
-            }}>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Created:</strong> {new Date(customer.created * 1000).toLocaleString()}
-                </div>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Service:</strong> {customer.metadata.service_type}
-                </div>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Payment Type:</strong> {customer.metadata.payment_type}
-                </div>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Price:</strong> ${customer.metadata.price}
-                </div>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Address:</strong> {customer.metadata.address}
-                </div>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Phone:</strong> {customer.metadata.phone}
-                </div>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Lot Size:</strong> {customer.metadata.lot_size}
-                </div>
-                {customer.metadata.charge_date && (
-                    <div style={{ marginBottom: '8px' }}>
-                        <strong>Last Charged:</strong> {customer.metadata.charge_date}
-                        <span style={{ color: '#666', fontSize: '0.9em' }}></span>
-                    </div>
-                )}
-                {customer.has_payment_method ? (
-                    <button
-                        onClick={() => handleChargeCustomer(customer.id, parseFloat(customer.metadata.price))}
-                        disabled={isCharging || (!isRecurring && customer.metadata.charged === 'true')}
-                        style={{
-                            padding: '8px 16px',
-                            backgroundColor: isCharging ? '#A0AEC0' : '#48BB78',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: isCharging ? 'not-allowed' : 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px'
-                        }}
-                    >
-                        {isCharging ? 'Processing...' : 'Charge Customer'}
-                    </button>
-                ) : (
-                    <div style={{
-                        padding: '8px 16px',
-                        backgroundColor: '#FEF2F2',
-                        color: '#DC2626',
-                        borderRadius: '6px',
-                        fontSize: '14px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                    }}>
-                        <span style={{ fontWeight: 'bold' }}>⚠️</span>
-                        Awaiting Payment Method
-                    </div>
-                )}
-            </div>
-        )
-    }
-
-    const renderDashboardSummary = () => {
-        const totalCustomers = customers.length
-        const paidCustomers = customers.filter(c => c.charged).length
-        const totalRevenue = customers
-            .filter(c => c.charged)
-            .reduce((sum, c) => sum + parseFloat(c.metadata.price), 0)
-
-        return (
-            <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '16px',
-                marginBottom: '24px',
-                padding: '16px',
-                backgroundColor: '#f7fafc',
-                borderRadius: '8px'
-            }}>
-                <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{totalCustomers}</div>
-                    <div style={{ color: '#4a5568' }}>Total Customers</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{paidCustomers}</div>
-                    <div style={{ color: '#4a5568' }}>Payments Collected</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '24px', fontWeight: 'bold' }}>${totalRevenue.toFixed(2)}</div>
-                    <div style={{ color: '#4a5568' }}>Total Revenue</div>
-                </div>
-            </div>
-        )
-    }
-
-    const renderLoginForm = () => {
-        return (
-            <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                minHeight: '100vh',
-                backgroundColor: '#f7fafc'
-            }}>
-                <form onSubmit={handleLogin} style={{
-                    backgroundColor: 'white',
-                    padding: '2rem',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                    width: '100%',
-                    maxWidth: '400px'
-                }}>
-                    <h2 style={{ marginBottom: '1.5rem', textAlign: 'center' }}>Admin Login</h2>
-                    <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Enter admin password"
-                        style={{
-                            width: '100%',
-                            padding: '0.75rem',
-                            marginBottom: '1rem',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '6px'
-                        }}
-                    />
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        style={{
-                            width: '100%',
-                            padding: '0.75rem',
-                            backgroundColor: loading ? '#cbd5e0' : '#4CAF50',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: loading ? 'not-allowed' : 'pointer'
-                        }}
-                    >
-                        {loading ? 'Logging in...' : 'Login'}
-                    </button>
-                    {error && (
-                        <div style={{ color: 'red', marginTop: '1rem', textAlign: 'center' }}>
-                            {error}
-                        </div>
-                    )}
-                </form>
-            </div>
-        )
-    }
-
-    if (!isAuthenticated) {
-        return renderLoginForm()
-    }
-
-    if (loading) {
-        return (
-            <div style={{ 
-                display: 'flex', 
-                justifyContent: 'center', 
-                alignItems: 'center', 
-                minHeight: '100vh' 
-            }}>
-                Loading customers...
-            </div>
-        )
-    }
-
-    if (error && !customers.length) {
-        return (
-            <div style={{ 
-                display: 'flex', 
-                justifyContent: 'center', 
-                alignItems: 'center', 
-                minHeight: '100vh',
-                color: 'red' 
-            }}>
-                {error}
-            </div>
-        )
-    }
-
     return (
-        <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
-            <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                marginBottom: '24px'
-            }}>
-                <h1 style={{ margin: 0 }}>Admin Dashboard</h1>
-                <button
-                    onClick={() => {
-                        localStorage.removeItem('adminAuth')
-                        setIsAuthenticated(false)
-                    }}
-                    style={{
-                        padding: "8px 16px",
-                        backgroundColor: "#EDF2F7",
-                        border: "none",
-                        borderRadius: "6px",
-                        color: "#4A5568",
-                        fontSize: "14px",
-                        cursor: "pointer"
+        <Container maxWidth="xl">
+            {!isAuthenticated ? (
+                <Box
+                    sx={{
+                        marginTop: 8,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center'
                     }}
                 >
-                    Logout
-                </button>
-            </div>
+                    <Paper
+                        elevation={3}
+                        sx={{
+                            p: 4,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            maxWidth: 400,
+                            width: '100%'
+                        }}
+                    >
+                        <Typography component="h1" variant="h5" gutterBottom>
+                            Admin Login
+                        </Typography>
+                        <form onSubmit={handleLogin} style={{ width: '100%' }}>
+                            <TextField
+                                variant="outlined"
+                                margin="normal"
+                                required
+                                fullWidth
+                                type="password"
+                                label="Password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                            />
+                            <Button
+                                type="submit"
+                                fullWidth
+                                variant="contained"
+                                color="primary"
+                                sx={{ mt: 3, mb: 2 }}
+                                disabled={loading}
+                            >
+                                {loading ? <CircularProgress size={24} /> : 'Login'}
+                            </Button>
+                        </form>
+                    </Paper>
+                </Box>
+            ) : (
+                <Box sx={{ mt: 4 }}>
+                    <Grid container spacing={3}>
+                        <Grid item xs={12}>
+                            <Paper sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+                                <TextField
+                                    placeholder="Search customers..."
+                                    variant="outlined"
+                                    size="small"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    InputProps={{
+                                        startAdornment: (
+                                            <InputAdornment position="start">
+                                                <SearchIcon />
+                                            </InputAdornment>
+                                        )
+                                    }}
+                                    sx={{ flexGrow: 1 }}
+                                />
+                                <FormControl size="small" sx={{ minWidth: 200 }}>
+                                    <InputLabel>Payment Type</InputLabel>
+                                    <Select
+                                        value={filterPaymentType}
+                                        label="Payment Type"
+                                        onChange={(e) => setFilterPaymentType(e.target.value as any)}
+                                    >
+                                        <MenuItem value="all">All</MenuItem>
+                                        <MenuItem value="one_time">One Time</MenuItem>
+                                        <MenuItem value="recurring">Recurring</MenuItem>
+                                    </Select>
+                                </FormControl>
+                                <IconButton onClick={() => setRefreshKey(k => k + 1)}>
+                                    <RefreshIcon />
+                                </IconButton>
+                                <Button
+                                    variant="contained"
+                                    color="error"
+                                    onClick={() => setDeleteAllDialogOpen(true)}
+                                    startIcon={<DeleteIcon />}
+                                >
+                                    Delete All Customers
+                                </Button>
+                            </Paper>
+                        </Grid>
 
-            {renderDashboardSummary()}
+                        <Grid item xs={12}>
+                            <TableContainer component={Paper}>
+                                <Table>
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell>
+                                                <Button
+                                                    startIcon={<SortIcon />}
+                                                    onClick={() => {
+                                                        if (sortBy === 'date') {
+                                                            setSortOrder(order => order === 'asc' ? 'desc' : 'asc')
+                                                        } else {
+                                                            setSortBy('date')
+                                                            setSortOrder('desc')
+                                                        }
+                                                    }}
+                                                >
+                                                    Date
+                                                </Button>
+                                            </TableCell>
+                                            <TableCell>Customer Info</TableCell>
+                                            <TableCell>Service Details</TableCell>
+                                            <TableCell align="right">
+                                                <Button
+                                                    startIcon={<SortIcon />}
+                                                    onClick={() => {
+                                                        if (sortBy === 'price') {
+                                                            setSortOrder(order => order === 'asc' ? 'desc' : 'asc')
+                                                        } else {
+                                                            setSortBy('price')
+                                                            setSortOrder('desc')
+                                                        }
+                                                    }}
+                                                >
+                                                    Price
+                                                </Button>
+                                            </TableCell>
+                                            <TableCell>Actions</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {loading ? (
+                                            <TableRow>
+                                                <TableCell colSpan={5} align="center">
+                                                    <CircularProgress />
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : filteredCustomers.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={5} align="center">
+                                                    No customers found
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            filteredCustomers.map((customer) => (
+                                                <TableRow key={customer.id}>
+                                                    <TableCell>
+                                                        {new Date(customer.created * 1000).toLocaleDateString()}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Typography variant="body2">
+                                                            {customer.email}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="textSecondary">
+                                                            {customer.metadata.phone}
+                                                        </Typography>
+                                                        <Typography variant="caption" display="block" color="textSecondary">
+                                                            {customer.metadata.address}
+                                                        </Typography>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Typography variant="body2">
+                                                            {customer.metadata.service_type}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="textSecondary">
+                                                            Lot Size: {customer.metadata.lot_size}
+                                                        </Typography>
+                                                    </TableCell>
+                                                    <TableCell align="right">
+                                                        <Typography variant="body2">
+                                                            ${parseFloat(customer.metadata.price).toFixed(2)}
+                                                        </Typography>
+                                                        {customer.metadata.charge_date && (
+                                                            <Typography variant="caption" color="textSecondary">
+                                                                Last charged: {customer.metadata.charge_date}
+                                                            </Typography>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {customer.has_payment_method ? (
+                                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'success.main' }}>
+                                                                <PaymentIcon />
+                                                                <Typography variant="body2">Card Added</Typography>
+                                                            </Box>
+                                                        ) : (
+                                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
+                                                                <Typography variant="body2">No Payment Method</Typography>
+                                                            </Box>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Stack direction="row" spacing={1}>
+                                                            <IconButton
+                                                                color="primary"
+                                                                onClick={() => {
+                                                                    setEditDialog({
+                                                                        open: true,
+                                                                        customer,
+                                                                        newServiceType: customer.metadata.service_type,
+                                                                        newPrice: customer.metadata.price
+                                                                    })
+                                                                }}
+                                                            >
+                                                                <EditIcon />
+                                                            </IconButton>
+                                                            <IconButton
+                                                                color="error"
+                                                                onClick={() => {
+                                                                    setCustomerToDelete(customer)
+                                                                    setDeleteDialogOpen(true)
+                                                                }}
+                                                            >
+                                                                <DeleteIcon />
+                                                            </IconButton>
+                                                            <IconButton
+                                                                color="success"
+                                                                disabled={chargingCustomerId === customer.id}
+                                                                onClick={() => handleChargeCustomer(
+                                                                    customer.id,
+                                                                    parseFloat(customer.metadata.price)
+                                                                )}
+                                                            >
+                                                                <PaymentIcon />
+                                                            </IconButton>
+                                                        </Stack>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                        </Grid>
+                    </Grid>
 
-            {error && (
-                <div style={{ color: 'red', marginBottom: '1rem' }}>
-                    {error}
-                </div>
+                    {/* Delete Confirmation Dialog */}
+                    <Dialog
+                        open={deleteDialogOpen}
+                        onClose={() => setDeleteDialogOpen(false)}
+                    >
+                        <DialogTitle>Delete Customer</DialogTitle>
+                        <DialogContent>
+                            <DialogContentText>
+                                Are you sure you want to delete this customer? This action cannot be undone.
+                            </DialogContentText>
+                        </DialogContent>
+                        <DialogActions>
+                            <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+                            <Button onClick={handleDeleteCustomer} color="error" autoFocus>
+                                Delete
+                            </Button>
+                        </DialogActions>
+                    </Dialog>
+
+                    {/* Delete All Confirmation Dialog */}
+                    <Dialog
+                        open={deleteAllDialogOpen}
+                        onClose={() => setDeleteAllDialogOpen(false)}
+                    >
+                        <DialogTitle>Delete All Customers</DialogTitle>
+                        <DialogContent>
+                            <DialogContentText>
+                                Are you sure you want to delete all customers? This action cannot be undone.
+                            </DialogContentText>
+                        </DialogContent>
+                        <DialogActions>
+                            <Button onClick={() => setDeleteAllDialogOpen(false)}>Cancel</Button>
+                            <Button onClick={handleDeleteAllCustomers} color="error" autoFocus>
+                                Delete All
+                            </Button>
+                        </DialogActions>
+                    </Dialog>
+
+                    {/* Edit Service Dialog */}
+                    <Dialog
+                        open={editDialog.open}
+                        onClose={() => setEditDialog(prev => ({ ...prev, open: false }))}
+                    >
+                        <DialogTitle>Edit Service</DialogTitle>
+                        <DialogContent>
+                            <Stack spacing={3} sx={{ mt: 2 }}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Service Type</InputLabel>
+                                    <Select
+                                        value={editDialog.newServiceType}
+                                        label="Service Type"
+                                        onChange={(e) => setEditDialog(prev => ({
+                                            ...prev,
+                                            newServiceType: e.target.value
+                                        }))}
+                                    >
+                                        <MenuItem value="ONE_TIME">One Time</MenuItem>
+                                        <MenuItem value="WEEKLY">Weekly</MenuItem>
+                                        <MenuItem value="BI_WEEKLY">Bi-Weekly</MenuItem>
+                                        <MenuItem value="MONTHLY">Monthly</MenuItem>
+                                    </Select>
+                                </FormControl>
+                                <TextField
+                                    label="Price"
+                                    type="number"
+                                    value={editDialog.newPrice}
+                                    onChange={(e) => setEditDialog(prev => ({
+                                        ...prev,
+                                        newPrice: e.target.value
+                                    }))}
+                                    InputProps={{
+                                        startAdornment: <InputAdornment position="start">$</InputAdornment>
+                                    }}
+                                />
+                            </Stack>
+                        </DialogContent>
+                        <DialogActions>
+                            <Button onClick={() => setEditDialog(prev => ({ ...prev, open: false }))}>
+                                Cancel
+                            </Button>
+                            <Button onClick={handleUpdateService} color="primary" autoFocus>
+                                Update
+                            </Button>
+                        </DialogActions>
+                    </Dialog>
+
+                    {/* Success/Error Snackbars */}
+                    <Snackbar
+                        open={!!success}
+                        autoHideDuration={6000}
+                        onClose={() => setSuccess(null)}
+                        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                    >
+                        <Alert severity="success" onClose={() => setSuccess(null)}>
+                            {success}
+                        </Alert>
+                    </Snackbar>
+
+                    <Snackbar
+                        open={!!error}
+                        autoHideDuration
+                        onClose={() => setError(null)}
+                        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                    >
+                        <Alert severity="error" onClose={() => setError(null)}>
+                            {error}
+                        </Alert>
+                    </Snackbar>
+
+                    <Snackbar
+                        open={snackbar.open}
+                        autoHideDuration={6000}
+                        onClose={() => setSnackbar({ open: false, message: '', severity: 'success' })}
+                        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                    >
+                        <Alert severity={snackbar.severity} onClose={() => setSnackbar({ open: false, message: '', severity: 'success' })}>
+                            {snackbar.message}
+                        </Alert>
+                    </Snackbar>
+                </Box>
             )}
-            {success && (
-                <div style={{ color: 'green', marginBottom: '1rem' }}>
-                    {success}
-                </div>
-            )}
-
-            <div style={{ 
-                display: 'flex', 
-                gap: '16px', 
-                marginBottom: '24px',
-                alignItems: 'center'
-            }}>
-                <input
-                    type="text"
-                    placeholder="Search by address, service type, or phone"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    style={{
-                        padding: '8px 12px',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '6px',
-                        flex: 1
-                    }}
-                />
-                <select
-                    value={filterPaymentType}
-                    onChange={(e) => setFilterPaymentType(e.target.value as 'all' | 'one_time' | 'recurring')}
-                    style={{
-                        padding: '8px 12px',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '6px'
-                    }}
-                >
-                    <option value="all">All Payment Types</option>
-                    <option value="one_time">One-time</option>
-                    <option value="recurring">Recurring</option>
-                </select>
-                <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as 'date' | 'price' | 'status')}
-                    style={{
-                        padding: '8px 12px',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '6px'
-                    }}
-                >
-                    <option value="date">Sort by Date</option>
-                    <option value="price">Sort by Price</option>
-                    <option value="status">Sort by Status</option>
-                </select>
-                <button
-                    onClick={() => setSortOrder(order => order === 'asc' ? 'desc' : 'asc')}
-                    style={{
-                        padding: '8px 12px',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '6px',
-                        backgroundColor: 'white',
-                        cursor: 'pointer'
-                    }}
-                >
-                    {sortOrder === 'asc' ? '↑' : '↓'}
-                </button>
-                <button
-                    onClick={() => setRefreshKey(k => k + 1)}
-                    style={{
-                        padding: '8px 12px',
-                        backgroundColor: '#4CAF50',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer'
-                    }}
-                >
-                    Refresh
-                </button>
-                <button
-                    onClick={handleDeleteAllCustomers}
-                    style={{
-                        padding: "8px 16px",
-                        borderRadius: "4px",
-                        border: "none",
-                        background: "#dc3545",
-                        color: "#fff",
-                        cursor: "pointer"
-                    }}
-                >
-                    Delete All Customers
-                </button>
-            </div>
-
-            <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-                gap: '16px'
-            }}>
-                {filteredCustomers.map(customer => renderCustomerCard(customer))}
-            </div>
-        </div>
+        </Container>
     )
 }
 

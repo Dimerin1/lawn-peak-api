@@ -1,10 +1,12 @@
 import React from 'react';
+import { Alert, Snackbar } from '@mui/material';
 
 interface LayoutProps {
     children: React.ReactNode;
 }
 
 export default function Layout({ children }: LayoutProps) {
+    const [error, setError] = React.useState<string | null>(null);
     const [showThankYou, setShowThankYou] = React.useState(() => {
         if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search);
@@ -30,14 +32,21 @@ export default function Layout({ children }: LayoutProps) {
                 };
 
                 script.onerror = function() {
-                    console.error("Error loading Google Maps script");
+                    const errorMsg = "Error loading Google Maps script";
+                    console.error(errorMsg);
+                    setError(errorMsg);
                 };
 
                 document.head.appendChild(script);
             }
         };
 
-        loadGoogleMaps();
+        try {
+            loadGoogleMaps();
+        } catch (err) {
+            console.error('Error in Layout:', err);
+            setError(err instanceof Error ? err.message : 'An unexpected error occurred');
+        }
 
         const params = new URLSearchParams(window.location.search);
         const setupStatus = params.get('setup');
@@ -112,9 +121,22 @@ export default function Layout({ children }: LayoutProps) {
     ) : null;
 
     return (
-        <>
+        <div>
             <ThankYouMessage />
             {children}
-        </>
+            
+            {error && (
+                <Snackbar 
+                    open={!!error} 
+                    autoHideDuration={6000} 
+                    onClose={() => setError(null)}
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                >
+                    <Alert onClose={() => setError(null)} severity="error">
+                        {error}
+                    </Alert>
+                </Snackbar>
+            )}
+        </div>
     );
 }

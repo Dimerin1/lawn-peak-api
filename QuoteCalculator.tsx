@@ -84,11 +84,11 @@ const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, 
     const getServiceBadge = () => {
         switch(serviceType) {
             case 'ONE_TIME':
-                return { text: 'Quick Service', color: '#FF9800' }
+                return { text: 'Quick Service', color: '#8E44AD' }
             case 'WEEKLY':
-                return { text: 'Best Value', color: '#4CAF50' }
+                return { text: 'Best Value', color: '#34C759' }
             case 'BI_WEEKLY':
-                return { text: 'Most Popular', color: '#4CAF50' }
+                return { text: 'Most Popular', color: '#34C759' }
             case 'MONTHLY':
                 return { text: 'Flexible Service', color: '#2196F3' }
             default:
@@ -99,9 +99,9 @@ const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, 
     const getComparisonHint = () => {
         switch(serviceType) {
             case 'ONE_TIME':
-                return { text: 'Switch to weekly and save 20%', color: '#4CAF50' }
+                return { text: 'Switch to weekly and save 20%', color: '#34C759' }
             case 'MONTHLY':
-                return { text: 'Switch to bi-weekly and save 10%', color: '#4CAF50' }
+                return { text: 'Switch to bi-weekly and save 10%', color: '#34C759' }
             default:
                 return null
         }
@@ -117,18 +117,27 @@ const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, 
             borderRadius: '20px',
             boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
             fontFamily: 'Be Vietnam Pro',
-            marginBottom: '16px', // Add margin to prevent shadow cutoff
+            marginBottom: '16px',
+            position: 'relative',
+            overflow: 'hidden'
         }}>
             {badge && (
                 <div style={{ 
-                    backgroundColor: badge.color, 
-                    color: 'white', 
-                    padding: '6px 12px', 
-                    borderRadius: '6px', 
-                    fontSize: '14px',
-                    display: 'inline-block',
-                    marginBottom: '16px',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    backgroundColor: badge.color,
+                    color: 'white',
+                    padding: '6px 30px',
+                    fontSize: '13px',
                     fontFamily: 'Be Vietnam Pro',
+                    transform: 'rotate(0deg)',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                    zIndex: 1,
+                    textAlign: 'center',
+                    fontWeight: '500',
+                    borderTopLeftRadius: '20px',
+                    borderBottomRightRadius: '12px'
                 }}>
                     {badge.text}
                 </div>
@@ -136,15 +145,20 @@ const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, 
             
             <div style={{ 
                 marginBottom: '24px',
-                textAlign: 'center'
+                textAlign: 'center',
+                position: 'relative',
+                zIndex: 2,
+                marginTop: '32px'
             }}>
                 {isRecurring ? (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-                        <span style={{ textDecoration: 'line-through', color: '#666', fontSize: '24px', fontFamily: 'Be Vietnam Pro' }}>${originalPrice}</span>
+                        {(serviceType === 'WEEKLY' || serviceType === 'BI_WEEKLY') && (
+                            <span style={{ textDecoration: 'line-through', color: '#666', fontSize: '24px', fontFamily: 'Be Vietnam Pro' }}>${originalPrice}</span>
+                        )}
                         <span style={{ fontSize: '36px', fontWeight: '600', color: '#333', fontFamily: 'Be Vietnam Pro' }}>${price}</span>
                         {(serviceType === 'WEEKLY' || serviceType === 'BI_WEEKLY') && (
                             <span style={{ 
-                                backgroundColor: '#4CAF50', 
+                                backgroundColor: '#34C759', 
                                 color: 'white', 
                                 padding: '4px 8px', 
                                 borderRadius: '6px', 
@@ -162,6 +176,22 @@ const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, 
                 )}
             </div>
 
+            {(serviceType === 'MONTHLY' || serviceType === 'ONE_TIME') && (
+                <div style={{ 
+                    fontSize: '14px', 
+                    color: '#34C759', 
+                    textAlign: 'center',
+                    fontWeight: '500',
+                    marginBottom: '24px',
+                    fontFamily: 'Be Vietnam Pro',
+                }}>
+                    {serviceType === 'MONTHLY' 
+                        ? 'Switch to bi-weekly and save 10%'
+                        : 'Switch to weekly and save 20%'
+                    }
+                </div>
+            )}
+
             <div style={{ 
                 fontSize: '14px', 
                 color: '#666', 
@@ -178,18 +208,16 @@ const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, 
                 <div style={{ marginBottom: '8px' }}>✓ Grass clippings cleanup</div>
             </div>
 
-            {hint && (
-                <div style={{ 
-                    fontSize: '14px', 
-                    color: hint.color, 
-                    textAlign: 'center',
-                    fontWeight: '500',
-                    marginBottom: '24px',
-                    fontFamily: 'Be Vietnam Pro',
-                }}>
-                    {hint.text}
-                </div>
-            )}
+            <div style={{ 
+                fontSize: '14px', 
+                color: '#666', 
+                textAlign: 'center',
+                marginBottom: '24px',
+                fontFamily: 'Be Vietnam Pro',
+                fontStyle: 'italic'
+            }}>
+                You will only be charged after the service is completed
+            </div>
 
             <button
                 className="add-payment-button"
@@ -275,6 +303,9 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
     });
 
     React.useEffect(() => {
+        // Initialize dataLayer if it doesn't exist
+        window.dataLayer = window.dataLayer || [];
+        
         // Fetch Stripe publishable key from backend
         fetch('http://localhost:8080/config')
             .then(response => response.json())
@@ -419,26 +450,24 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
             const successUrl = `${baseUrl}?setup=success`;
             const cancelUrl = `${baseUrl}?setup=canceled`;
 
-            const requestData = {
-                price: formData.price,
-                service_type: formData.service,
+            // Prepare data for both requests
+            const quoteData = {
+                name: formData.name || 'Not provided',
+                email: formData.email || 'Not provided',
+                phone: formData.phone,
                 address: formData.address,
                 lot_size: formData.lotSize,
-                phone: formData.phone,
-                success_url: successUrl,
-                cancel_url: cancelUrl
+                service_type: formData.service,
+                price: formData.price,
+                start_date: formData.startDate || 'Not provided'
             };
 
-            console.log('Creating setup intent with data:', requestData);
+            // Send quote data to Google Sheets asynchronously
+            const apiBaseUrl = window.location.hostname === 'localhost'
+                ? 'http://localhost:8080'
+                : 'https://lawn-peak-api.onrender.com';
 
-            // Use environment-based API URL
-            const apiUrl = window.location.hostname === 'localhost'
-                ? 'http://localhost:8080/create-setup-intent'
-                : 'https://lawn-peak-api.onrender.com/create-setup-intent';
-
-            console.log('Sending request to:', apiUrl);
-
-            const response = await fetch(apiUrl, {
+            fetch(`${apiBaseUrl}/submit-quote`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -446,16 +475,38 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 },
                 mode: 'cors',
                 credentials: 'omit',
-                body: JSON.stringify(requestData)
+                body: JSON.stringify(quoteData)
+            }).catch(error => {
+                console.error('Error submitting quote data:', error);
+                // Don't block the payment process if quote submission fails
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
+            // Proceed with setup intent
+            const setupIntentResponse = await fetch(`${apiBaseUrl}/create-setup-intent`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
+                mode: 'cors',
+                credentials: 'omit',
+                body: JSON.stringify({
+                    price: formData.price,
+                    service_type: formData.service,
+                    address: formData.address,
+                    lot_size: formData.lotSize,
+                    phone: formData.phone,
+                    success_url: successUrl,
+                    cancel_url: cancelUrl
+                })
+            });
+            if (!setupIntentResponse.ok) {
+                const errorData = await setupIntentResponse.json();
                 console.error('Server response:', errorData);
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                throw new Error(errorData.error || `HTTP error! status: ${setupIntentResponse.status}`);
             }
 
-            const data = await response.json();
+            const data = await setupIntentResponse.json();
             
             if (data.error) {
                 throw new Error(data.error);
@@ -467,6 +518,15 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
 
             // Save form data to localStorage before redirect
             localStorage.setItem('quoteFormData', JSON.stringify(formData));
+
+            // Push event to dataLayer for Google Tag Manager
+            window.dataLayer.push({
+                'event': 'payment_method_added',
+                'value': formData.price,
+                'currency': 'USD',
+                'service_type': formData.service,
+                'lot_size': formData.lotSize
+            });
 
             // Redirect to Stripe Checkout
             window.location.href = data.setupIntentUrl;
@@ -594,7 +654,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     .not-charged-message {
                         font-size: 15px;
                         font-weight: 500;
-                        color: #4CAF50;
+                        color: #34C759;
                         margin-bottom: 20px;
                         padding: 10px 20px;
                         background-color: rgba(76, 175, 80, 0.1);
@@ -612,7 +672,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                         animation: fadeIn 0.5s ease-out;
                         transition: all 0.3s ease;
                         position: relative;
-                        overflow: hidden;
+                        overflow: 'visible';
                         margin: 8px 0;
                         text-align: center;
                         border: 1px solid rgba(0, 0, 0, 0.05);
@@ -654,7 +714,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     }
                     
                     .savings-badge {
-                        background-color: #4CAF50;
+                        background-color: #34C759;
                         color: white;
                         padding: 4px 8px;
                         border-radius: 4px;
@@ -715,7 +775,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     .trust-message svg {
                         width: 14px;
                         height: 14px;
-                        color: #4CAF50;
+                        color: #34C759;
                     }
 
                     input::placeholder,
@@ -791,7 +851,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     }
 
                     .savings-badge {
-                        background-color: #4CAF50;
+                        background-color: #34C759;
                         color: white;
                         padding: 4px 8px;
                         border-radius: 4px;
@@ -895,7 +955,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     }
 
                     .calendar-day.selected {
-                        background-color: #4CAF50;
+                        background-color: #34C759;
                         color: white;
                     }
 

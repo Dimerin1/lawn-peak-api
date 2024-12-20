@@ -52,6 +52,15 @@ except Exception as e:
 # Create Flask app
 app = Flask(__name__)
 
+# Configure CORS to allow requests from frontend
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://localhost:3000", "http://localhost:3001"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
+
 # Configure CORS with specific origins
 ALLOWED_ORIGINS = [
     'http://localhost:3000',
@@ -385,7 +394,7 @@ def create_setup_intent():
         if not data:
             return jsonify({'error': 'No data provided'}), 400
 
-        required_fields = ['service_type', 'address', 'lot_size', 'phone']
+        required_fields = ['service_type', 'address', 'lot_size', 'phone', 'price']
         missing_fields = [field for field in required_fields if not data.get(field)]
         if missing_fields:
             return jsonify({'error': f'Missing required fields: {", ".join(missing_fields)}'}), 400
@@ -399,7 +408,8 @@ def create_setup_intent():
                 'service_type': data.get('service_type'),
                 'address': data.get('address'),
                 'lot_size': data.get('lot_size'),
-                'phone': data.get('phone')
+                'phone': data.get('phone'),
+                'price': str(data.get('price')),  # Convert price to string for metadata
             }
         )
         logger.info(f"Created customer: {customer.id}")
@@ -415,7 +425,8 @@ def create_setup_intent():
                 'service_type': data.get('service_type'),
                 'address': data.get('address'),
                 'lot_size': data.get('lot_size'),
-                'phone': data.get('phone')
+                'phone': data.get('phone'),
+                'price': str(data.get('price'))  # Also add price to session metadata
             }
         )
         logger.info(f"Created session: {session.id}")
@@ -559,28 +570,25 @@ def create_test_customer():
             'stripe_key_present': bool(stripe.api_key)
         }), 500
 
-@app.route('/delete-all-customers', methods=['POST'])
+@app.route('/delete-all-customers', methods=['DELETE'])
 def delete_all_customers():
+    """Delete all customers from Stripe."""
     try:
         # List all customers
         customers = stripe.Customer.list(limit=100)
         
         # Delete each customer
-        deleted_count = 0
         for customer in customers.data:
             stripe.Customer.delete(customer.id)
-            deleted_count += 1
             
         return jsonify({
             'success': True,
-            'message': f'Successfully deleted {deleted_count} customers'
+            'message': f'Successfully deleted {len(customers.data)} customers'
         })
-            
-    except stripe.error.StripeError as e:
-        return jsonify({'error': str(e.user_message)}), 400
+        
     except Exception as e:
-        print('Error deleting customers:', str(e))
-        return jsonify({'error': 'An unexpected error occurred'}), 500
+        logger.error(f"Error deleting all customers: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/format-sheet', methods=['POST'])
 def format_sheet():
@@ -821,15 +829,267 @@ def append_to_sheet_endpoint():
 
 @app.route('/config')
 def get_config():
-    publishable_key = os.getenv('STRIPE_PUBLISHABLE_KEY')
-    if not publishable_key:
-        logger.error("STRIPE_PUBLISHABLE_KEY environment variable is not set")
-        return jsonify({'error': 'Stripe configuration not found'}), 500
+    """Get Stripe publishable key"""
     return jsonify({
-        'publishableKey': publishable_key
+        'publishableKey': os.getenv('STRIPE_PUBLISHABLE_KEY')
     })
 
-# Google Sheets Integration
+@app.route('/delete-customer/<customer_id>', methods=['DELETE', 'OPTIONS'])
+def delete_customer(customer_id):
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'DELETE')
+        return response
+
+    try:
+        # Delete customer from Stripe
+        customer = stripe.Customer.delete(customer_id)
+        
+        # Delete customer from Google Sheets
+        if GOOGLE_SERVICES_AVAILABLE:
+            service = get_sheets_service()
+            SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID', '19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA')
+            
+            result = service.spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range='A:I'
+            ).execute()
+            values = result.get('values', [])
+            
+            # Find and delete the customer's row
+            customer_row = None
+            for i, row in enumerate(values):
+                if len(row) > 2 and row[2] == customer.email:  # Email is in column C (index 2)
+                    customer_row = i + 1  # +1 because sheets are 1-indexed
+                    break
+            
+            if customer_row:
+                # Clear the row
+                service.spreadsheets().values().clear(
+                    spreadsheetId=SPREADSHEET_ID,
+                    range=f'A{customer_row}:I{customer_row}'
+                ).execute()
+        
+        return jsonify({'success': True, 'message': f'Customer {customer_id} deleted successfully'})
+    except Exception as e:
+        logger.error(f"Error deleting customer: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/update-customer-service', methods=['POST', 'OPTIONS'])
+def update_customer_service():
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'POST')
+        return response
+
+    try:
+        data = request.json
+        customer_id = data.get('customer_id')
+        new_service_type = data.get('service_type')
+        new_price = data.get('price')  # New custom price
+        
+        if not all([customer_id, new_service_type, new_price]):
+            return jsonify({'error': 'Missing required fields'}), 400
+            
+        # Update customer metadata in Stripe
+        stripe.Customer.modify(
+            customer_id,
+            metadata={
+                'service_type': new_service_type,
+                'price': str(new_price)
+            }
+        )
+        
+        # Update Google Sheets if available
+        if GOOGLE_SERVICES_AVAILABLE:
+            service = get_sheets_service()
+            SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID', '19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA')
+            
+            result = service.spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range='A:I'
+            ).execute()
+            values = result.get('values', [])
+            
+            # Find the customer's row
+            customer_row = None
+            customer = stripe.Customer.retrieve(customer_id)
+            for i, row in enumerate(values):
+                if len(row) > 2 and row[2] == customer.email:
+                    customer_row = i + 1
+                    break
+            
+            if customer_row:
+                # Update service type and price
+                service.spreadsheets().values().update(
+                    spreadsheetId=SPREADSHEET_ID,
+                    range=f'D{customer_row}:E{customer_row}',  # Assuming D is service type and E is price
+                    valueInputOption='RAW',
+                    body={
+                        'values': [[new_service_type, str(new_price)]]
+                    }
+                ).execute()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Customer {customer_id} service updated successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error updating customer service: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/submit-quote', methods=['POST'])
+def submit_quote():
+    try:
+        logger.info("Received quote submission request")
+        data = request.json
+        logger.info(f"Quote data received: {data}")
+        
+        # Add default values for optional fields
+        data['name'] = data.get('name', 'Not provided')
+        data['email'] = data.get('email', 'Not provided')
+        
+        required_fields = ['service_type', 'phone', 'address', 'lot_size', 'price']
+        
+        if not all(field in data for field in required_fields):
+            logger.error(f"Missing required fields. Received fields: {data.keys()}")
+            return jsonify({'error': 'Missing required fields'}), 400
+            
+        # Store in Google Sheets
+        logger.info("Attempting to store in Google Sheets...")
+        if append_to_sheet(data):
+            logger.info("Successfully stored in Google Sheets")
+            return jsonify({'success': True, 'message': 'Quote submitted successfully'})
+        else:
+            logger.error("Failed to store in Google Sheets")
+            return jsonify({'error': 'Failed to store quote data'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error in submit_quote: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/list-customers', methods=['GET'])
+def list_customers():
+    try:
+        # List all customers
+        customers = stripe.Customer.list(limit=100)
+        
+        # Format customer data
+        formatted_customers = []
+        for customer in customers.data:
+            # Get payment methods for customer
+            payment_methods = stripe.PaymentMethod.list(
+                customer=customer.id,
+                type='card'
+            )
+            
+            has_payment_method = len(payment_methods.data) > 0
+            
+            # Get price from metadata and ensure it's a valid number
+            price = customer.metadata.get('price', '0')
+            try:
+                # Try to convert to float and back to string to ensure valid number
+                price = str(float(price))
+            except (ValueError, TypeError):
+                price = '0'
+            
+            # Ensure metadata values are strings and present
+            metadata = {
+                'service_type': customer.metadata.get('service_type', ''),
+                'payment_type': customer.metadata.get('payment_type', ''),
+                'address': customer.metadata.get('address', ''),
+                'lot_size': customer.metadata.get('lot_size', ''),
+                'phone': customer.metadata.get('phone', ''),
+                'price': price,  # Use the validated price
+                'charged': customer.metadata.get('charged', 'false'),
+                'charge_date': customer.metadata.get('charge_date', '')
+            }
+            
+            # Print debug information
+            logger.info(f"Customer {customer.id} metadata: {customer.metadata}")
+            logger.info(f"Original price: {customer.metadata.get('price')}")
+            logger.info(f"Formatted price: {metadata['price']}")
+            
+            customer_data = {
+                'id': customer.id,
+                'email': customer.email or '',
+                'metadata': metadata,
+                'created': customer.created,
+                'has_payment_method': has_payment_method,
+                'charged': metadata['charged'].lower() == 'true'
+            }
+            formatted_customers.append(customer_data)
+            
+        return jsonify({'customers': formatted_customers})
+            
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe error in list_customers: {str(e)}")
+        return jsonify({'error': str(e.user_message)}), 400
+    except Exception as e:
+        logger.error(f"Error listing customers: {str(e)}")
+        return jsonify({'error': 'An unexpected error occurred'}), 500
+
+@app.errorhandler(404)
+def not_found_error(error):
+    routes = [str(rule) for rule in app.url_map.iter_rules()]
+    logger.error(f"404 Error. Available routes: {routes}")
+    return jsonify({
+        'error': 'Not Found',
+        'message': 'The requested URL was not found on the server.',
+        'available_routes': routes
+    }), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"500 Error: {str(error)}")
+    return jsonify({
+        'error': 'Internal Server Error',
+        'message': str(error)
+    }), 500
+
+def calculate_price(lot_size_range, service_type='ONE_TIME'):
+    # Base prices for different lot sizes
+    base_prices = {
+        'SMALL': 60,    # Up to 5,000 sq ft
+        'MEDIUM': 70,   # 5,000 - 10,000 sq ft
+        'LARGE': 75,    # 10,000 - 15,000 sq ft
+        'XLARGE': 80    # Over 15,000 sq ft
+    }
+    
+    # Service type discounts
+    service_discounts = {
+        'ONE_TIME': 0,      # No discount
+        'MONTHLY': 0,       # No discount
+        'BI_WEEKLY': 0.10,  # 10% discount
+        'WEEKLY': 0.20      # 20% discount
+    }
+    
+    base_price = base_prices.get(lot_size_range, base_prices['XLARGE'])
+    discount = service_discounts.get(service_type, 0)
+    
+    # Apply discount and round to nearest $5
+    final_price = base_price * (1 - discount)
+    return round(final_price / 5) * 5
+
+def get_lot_size(address):
+    """
+    Determine lot size category based on address.
+    Returns one of: SMALL, MEDIUM, LARGE, XLARGE
+    """
+    try:
+        # For now, return a default category
+        # In production, this would use Google Maps API to get actual lot size
+        return "MEDIUM"
+        
+    except Exception as e:
+        logger.error(f'Error in get_lot_size: {str(e)}')
+        return None
+
 def get_sheets_service():
     credentials = service_account.Credentials.from_service_account_info({
         "type": "service_account",
@@ -1019,138 +1279,6 @@ def append_to_sheet(data):
     except Exception as e:
         logger.error(f"Error appending to sheet: {str(e)}")
         return False
-
-@app.route('/submit-quote', methods=['POST'])
-def submit_quote():
-    try:
-        logger.info("Received quote submission request")
-        data = request.json
-        logger.info(f"Quote data received: {data}")
-        
-        required_fields = ['name', 'email', 'service_type', 'phone', 'address', 'lot_size', 'price']
-        
-        if not all(field in data for field in required_fields):
-            logger.error(f"Missing required fields. Received fields: {data.keys()}")
-            return jsonify({'error': 'Missing required fields'}), 400
-            
-        # Store in Google Sheets
-        logger.info("Attempting to store in Google Sheets...")
-        if append_to_sheet(data):
-            logger.info("Successfully stored in Google Sheets")
-            return jsonify({'success': True, 'message': 'Quote submitted successfully'})
-        else:
-            logger.error("Failed to store in Google Sheets")
-            return jsonify({'error': 'Failed to store quote data'}), 500
-            
-    except Exception as e:
-        logger.error(f"Error in submit_quote: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/list-customers', methods=['GET'])
-def list_customers():
-    try:
-        # List all customers
-        customers = stripe.Customer.list(limit=100)
-        
-        # Format customer data
-        formatted_customers = []
-        for customer in customers.data:
-            # Get payment methods for customer
-            payment_methods = stripe.PaymentMethod.list(
-                customer=customer.id,
-                type='card'
-            )
-            
-            has_payment_method = len(payment_methods.data) > 0
-            
-            # Ensure metadata values are strings and present
-            metadata = {
-                'service_type': customer.metadata.get('service_type', ''),
-                'payment_type': customer.metadata.get('payment_type', ''),
-                'address': customer.metadata.get('address', ''),
-                'lot_size': customer.metadata.get('lot_size', ''),
-                'phone': customer.metadata.get('phone', ''),
-                'price': str(customer.metadata.get('price', '0')),  # Ensure price is a string
-                'charged': customer.metadata.get('charged', 'false'),
-                'charge_date': customer.metadata.get('charge_date', '')
-            }
-            
-            # Print debug information
-            print(f"Customer {customer.id} metadata:", customer.metadata)
-            print(f"Formatted price:", metadata['price'])
-            
-            customer_data = {
-                'id': customer.id,
-                'metadata': metadata,
-                'created': customer.created,
-                'has_payment_method': has_payment_method,
-                'charged': metadata['charged'].lower() == 'true'
-            }
-            formatted_customers.append(customer_data)
-            
-        return jsonify({'customers': formatted_customers})
-            
-    except stripe.error.StripeError as e:
-        return jsonify({'error': str(e.user_message)}), 400
-    except Exception as e:
-        print('Error listing customers:', str(e))
-        return jsonify({'error': 'An unexpected error occurred'}), 500
-
-@app.errorhandler(404)
-def not_found_error(error):
-    routes = [str(rule) for rule in app.url_map.iter_rules()]
-    logger.error(f"404 Error. Available routes: {routes}")
-    return jsonify({
-        'error': 'Not Found',
-        'message': 'The requested URL was not found on the server.',
-        'available_routes': routes
-    }), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    logger.error(f"500 Error: {str(error)}")
-    return jsonify({
-        'error': 'Internal Server Error',
-        'message': str(error)
-    }), 500
-
-def calculate_price(lot_size_range, service_type='ONE_TIME'):
-    # Base prices for different lot sizes
-    base_prices = {
-        'SMALL': 60,    # Up to 5,000 sq ft
-        'MEDIUM': 70,   # 5,000 - 10,000 sq ft
-        'LARGE': 75,    # 10,000 - 15,000 sq ft
-        'XLARGE': 80    # Over 15,000 sq ft
-    }
-    
-    # Service type discounts
-    service_discounts = {
-        'ONE_TIME': 0,      # No discount
-        'MONTHLY': 0,       # No discount
-        'BI_WEEKLY': 0.10,  # 10% discount
-        'WEEKLY': 0.20      # 20% discount
-    }
-    
-    base_price = base_prices.get(lot_size_range, base_prices['XLARGE'])
-    discount = service_discounts.get(service_type, 0)
-    
-    # Apply discount and round to nearest $5
-    final_price = base_price * (1 - discount)
-    return round(final_price / 5) * 5
-
-def get_lot_size(address):
-    """
-    Determine lot size category based on address.
-    Returns one of: SMALL, MEDIUM, LARGE, XLARGE
-    """
-    try:
-        # For now, return a default category
-        # In production, this would use Google Maps API to get actual lot size
-        return "MEDIUM"
-        
-    except Exception as e:
-        logger.error(f'Error in get_lot_size: {str(e)}')
-        return None
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 8080))
