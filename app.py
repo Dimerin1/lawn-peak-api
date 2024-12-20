@@ -419,7 +419,7 @@ def create_setup_intent():
             customer=customer.id,
             payment_method_types=['card'],
             mode='setup',
-            success_url=data.get('success_url', request.host_url),
+            success_url=f"{data.get('success_url', request.host_url)}?setup=success&customer_id={customer.id}",
             cancel_url=data.get('cancel_url', request.host_url),
             metadata={
                 'service_type': data.get('service_type'),
