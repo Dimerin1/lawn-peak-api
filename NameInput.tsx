@@ -7,13 +7,16 @@ export function NameInput() {
     const [showCanceled, setShowCanceled] = React.useState(false)
 
     React.useEffect(() => {
+        if (typeof window === 'undefined') return;
+        
         const params = new URLSearchParams(window.location.search)
         const setupStatus = params.get('setup')
         const customerId = params.get('customer_id')
         
         console.log('NameInput: Checking URL parameters:', {
             setupStatus,
-            customerId
+            customerId,
+            currentUrl: window.location.href
         })
         
         if (setupStatus === 'success' && customerId) {
@@ -24,7 +27,10 @@ export function NameInput() {
             // Auto-hide after 10 seconds
             const timer = setTimeout(() => {
                 setShowThankYou(false)
-                window.history.replaceState({}, '', window.location.pathname)
+                // Clean up URL parameters
+                if (window.history && window.history.replaceState) {
+                    window.history.replaceState({}, '', window.location.pathname)
+                }
             }, 10000)
             
             return () => clearTimeout(timer)

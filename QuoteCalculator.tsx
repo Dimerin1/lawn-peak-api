@@ -446,7 +446,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
         setPaymentError(null);
 
         try {
-            const baseUrl = window.location.href.split('?')[0];
+            const baseUrl = window.location.origin + window.location.pathname;
             const successUrl = `${baseUrl}?setup=success`;
             const cancelUrl = `${baseUrl}?setup=canceled`;
 
