@@ -415,12 +415,19 @@ def create_setup_intent():
         logger.info(f"Created customer: {customer.id}")
 
         # Create a checkout session
+        success_url = data.get('success_url', request.host_url)
+        cancel_url = data.get('cancel_url', request.host_url)
+        
+        # Add query parameters
+        success_url = f"{success_url}?setup=success&customer_id={customer.id}"
+        cancel_url = f"{cancel_url}?setup=canceled"
+        
         session = stripe.checkout.Session.create(
             customer=customer.id,
             payment_method_types=['card'],
             mode='setup',
-            success_url=f"{data.get('success_url', request.host_url)}?setup=success&customer_id={customer.id}",
-            cancel_url=data.get('cancel_url', request.host_url),
+            success_url=success_url,
+            cancel_url=cancel_url,
             metadata={
                 'service_type': data.get('service_type'),
                 'address': data.get('address'),

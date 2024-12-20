@@ -447,8 +447,8 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
 
         try {
             const baseUrl = window.location.origin + window.location.pathname;
-            const successUrl = `${baseUrl}?setup=success`;
-            const cancelUrl = `${baseUrl}?setup=canceled`;
+            const successUrl = baseUrl;
+            const cancelUrl = baseUrl;
 
             // Prepare data for both requests
             const quoteData = {
