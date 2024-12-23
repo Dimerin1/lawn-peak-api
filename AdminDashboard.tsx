@@ -99,9 +99,7 @@ function AdminDashboard() {
         headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json'
-        },
-        mode: 'cors',
-        credentials: 'omit'
+        }
     };
 
     // Simple authentication
