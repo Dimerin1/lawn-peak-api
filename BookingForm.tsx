@@ -835,7 +835,7 @@ const PriceDisplay = ({ price, serviceType, originalPrice }) => {
 export default function BookingForm() {
     // Form state
     const [step, setStep] = React.useState(1)
-    const [stripeConfig, setStripeConfig] = React.useState(null)
+    const [stripePublishableKey, setStripePublishableKey] = React.useState("")
     const [formData, setFormData] = React.useState(() => {
         // Get tomorrow's date
         const tomorrow = new Date()
@@ -860,9 +860,9 @@ export default function BookingForm() {
         }
     })
 
-    // Fetch Stripe config on mount
+    // Fetch Stripe publishable key
     React.useEffect(() => {
-        const getConfig = async () => {
+        const fetchStripeKey = async () => {
             try {
                 const apiBaseUrl =
                     process.env.NEXT_PUBLIC_API_URL ||
@@ -878,15 +878,15 @@ export default function BookingForm() {
                     throw new Error('Failed to fetch Stripe configuration')
                 }
                 
-                const { publishableKey } = await response.json()
-                setStripeConfig({ publishableKey })
+                const data = await response.json()
+                setStripePublishableKey(data.publishableKey)
             } catch (error) {
                 console.error('Error loading Stripe config:', error)
                 setError('Failed to load payment configuration')
             }
         }
         
-        getConfig()
+        fetchStripeKey()
     }, [])
 
     // UI state
@@ -900,24 +900,6 @@ export default function BookingForm() {
     const [showCalendar, setShowCalendar] = React.useState(false)
     const [showThankYou, setShowThankYou] = React.useState(false)
     const [showCanceled, setShowCanceled] = React.useState(false)
-
-    // Fetch Stripe publishable key
-    React.useEffect(() => {
-        const fetchStripeKey = async () => {
-            try {
-                const apiBaseUrl =
-                    process.env.NEXT_PUBLIC_API_URL ||
-                    "https://lawn-peak-api.onrender.com"
-                const response = await fetch(`${apiBaseUrl}/config`)
-                const data = await response.json()
-                setStripePublishableKey(data.publishableKey)
-            } catch (error) {
-                console.error('Error fetching Stripe key:', error)
-                setError('Failed to load payment configuration')
-            }
-        }
-        fetchStripeKey()
-    }, [])
 
     // Check URL parameters for setup status
     React.useEffect(() => {
