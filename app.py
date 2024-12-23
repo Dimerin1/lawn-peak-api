@@ -60,12 +60,12 @@ ALLOWED_ORIGINS = [
     'https://lawnpeak.com',
     'https://lawn-peak-front.onrender.com',
     'https://lawn-peak-api.onrender.com',
-    'https://fabulous-screenshot-71e24b.framer.app'  
+    'https://fabulous-screenshot-716470.framer.app'  
 ]
 
 CORS(app, resources={
     r"/*": {
-        "origins": "*",  
+        "origins": ALLOWED_ORIGINS,
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
         "expose_headers": ["Content-Type"],
@@ -76,7 +76,9 @@ CORS(app, resources={
 
 @app.after_request
 def after_request(response):
-    response.headers['Access-Control-Allow-Origin'] = '*'  
+    origin = request.headers.get('Origin')
+    if origin in ALLOWED_ORIGINS:
+        response.headers['Access-Control-Allow-Origin'] = origin
     response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
     response.headers['Access-Control-Max-Age'] = '3600'
