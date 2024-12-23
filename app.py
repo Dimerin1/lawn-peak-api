@@ -52,41 +52,33 @@ except Exception as e:
 # Create Flask app
 app = Flask(__name__)
 
-# Configure CORS to allow requests from frontend
+# Configure CORS
+ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:5173',
+    'https://lawnpeak.com',
+    'https://lawn-peak-front.onrender.com',
+    'https://lawn-peak-api.onrender.com',
+    'https://fabulous-screenshot-71e24b.framer.app'  
+]
+
 CORS(app, resources={
     r"/*": {
-        "origins": ["http://localhost:3000", "http://localhost:3001"],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "origins": "*",  
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "expose_headers": ["Content-Type"],
+        "supports_credentials": False,
+        "max_age": 3600
     }
 })
 
-# Configure CORS with specific origins
-ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'https://lawnpeak.com',
-    'https://lawn-peak-front.onrender.com',
-    'https://lawn-peak-api.onrender.com'
-]
-
-CORS(app, 
-     resources={r"/*": {
-         "origins": ALLOWED_ORIGINS,
-         "methods": ["GET", "POST", "OPTIONS"],
-         "allow_headers": ["Content-Type", "Authorization", "Stripe-Publishable-Key"],
-         "expose_headers": ["Content-Type"],
-         "supports_credentials": False,
-         "max_age": 3600
-     }}
-)
-
 @app.after_request
 def after_request(response):
-    origin = request.headers.get('Origin')
-    if origin in ALLOWED_ORIGINS:
-        response.headers['Access-Control-Allow-Origin'] = origin
-    response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Stripe-Publishable-Key'
+    response.headers['Access-Control-Allow-Origin'] = '*'  
+    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
     response.headers['Access-Control-Max-Age'] = '3600'
     return response
 
@@ -386,69 +378,40 @@ def create_payment_intent():
 
 @app.route('/create-setup-intent', methods=['POST', 'OPTIONS'])
 def create_setup_intent():
-    try:
-        if request.method == 'OPTIONS':
-            return after_request(make_response())
+    if request.method == 'OPTIONS':
+        return '', 204
 
+    try:
         data = request.get_json()
         if not data:
             return jsonify({'error': 'No data provided'}), 400
 
-        required_fields = ['service_type', 'address', 'lot_size', 'phone', 'price']
-        missing_fields = [field for field in required_fields if not data.get(field)]
-        if missing_fields:
-            return jsonify({'error': f'Missing required fields: {", ".join(missing_fields)}'}), 400
+        required_fields = ['price', 'service_type', 'address', 'lot_size', 'phone']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
 
-        logger.info(f"Creating setup intent with data: {data}")
-        
-        # Create a new customer
-        customer = stripe.Customer.create(
-            description="Customer for LawnPeak service",
-            metadata={
-                'service_type': data.get('service_type'),
-                'address': data.get('address'),
-                'lot_size': data.get('lot_size'),
-                'phone': data.get('phone'),
-                'price': str(data.get('price')),  # Convert price to string for metadata
-            }
-        )
-        logger.info(f"Created customer: {customer.id}")
-
-        # Create a checkout session
-        success_url = data.get('success_url', request.host_url)
-        cancel_url = data.get('cancel_url', request.host_url)
-        
-        # Add query parameters
-        success_url = f"{success_url}?setup=success&customer_id={customer.id}"
-        cancel_url = f"{cancel_url}?setup=canceled"
-        
-        session = stripe.checkout.Session.create(
-            customer=customer.id,
+        # Create Stripe Checkout Session
+        checkout_session = stripe.checkout.Session.create(
             payment_method_types=['card'],
             mode='setup',
-            success_url=success_url,
-            cancel_url=cancel_url,
+            customer_email=data.get('email'),
+            success_url=data.get('success_url', request.host_url),
+            cancel_url=data.get('cancel_url', request.host_url),
             metadata={
-                'service_type': data.get('service_type'),
-                'address': data.get('address'),
-                'lot_size': data.get('lot_size'),
-                'phone': data.get('phone'),
-                'price': str(data.get('price'))  # Also add price to session metadata
+                'price': data['price'],
+                'service_type': data['service_type'],
+                'address': data['address'],
+                'lot_size': data['lot_size'],
+                'phone': data['phone']
             }
         )
-        logger.info(f"Created session: {session.id}")
+        
+        return jsonify({'setupIntentUrl': checkout_session.url}), 200
 
-        return jsonify({
-            'setupIntentUrl': session.url,
-            'sessionId': session.id
-        })
-
-    except stripe.error.StripeError as e:
-        logger.error(f"Stripe error: {str(e)}")
-        return jsonify({'error': str(e.user_message)}), 400
     except Exception as e:
-        logger.error(f"Server error in create_setup_intent: {str(e)}")
-        return jsonify({'error': 'An unexpected error occurred'}), 500
+        print(f"Error creating setup intent: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -950,8 +913,11 @@ def update_customer_service():
         logger.error(f"Error updating customer service: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/submit-quote', methods=['POST'])
+@app.route('/submit-quote', methods=['POST', 'OPTIONS'])
 def submit_quote():
+    if request.method == 'OPTIONS':
+        return '', 204
+
     try:
         logger.info("Received quote submission request")
         data = request.json

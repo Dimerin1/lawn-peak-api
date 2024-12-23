@@ -78,8 +78,189 @@ const selectStyle = {
     }
 }
 
-const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, handlePayment }) => {
+const priceDisplayStyles = {
+    container: {
+        padding: '24px',
+        backgroundColor: 'white',
+        borderRadius: '16px',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+        width: '100%',
+        marginTop: '24px',
+    },
+    popularBadge: {
+        backgroundColor: '#34C759',
+        color: 'white',
+        padding: '6px 12px',
+        borderRadius: '20px',
+        fontSize: '14px',
+        fontWeight: '500',
+        display: 'inline-block',
+        marginBottom: '16px',
+    },
+    priceSection: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        marginBottom: '24px',
+    },
+    originalPrice: {
+        fontSize: '24px',
+        color: '#666',
+        textDecoration: 'line-through',
+        fontWeight: '500',
+    },
+    currentPrice: {
+        fontSize: '36px',
+        color: '#333',
+        fontWeight: '600',
+    },
+    savingsBadge: {
+        backgroundColor: '#E8F7ED',
+        color: '#34C759',
+        padding: '4px 8px',
+        borderRadius: '4px',
+        fontSize: '14px',
+        fontWeight: '500',
+    },
+    servicesList: {
+        margin: '24px 0',
+    },
+    serviceItem: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        marginBottom: '12px',
+        color: '#666',
+        fontSize: '15px',
+    },
+    checkmark: {
+        color: '#34C759',
+    },
+    paymentNote: {
+        textAlign: 'center',
+        color: '#666',
+        fontSize: '14px',
+        marginTop: '16px',
+    },
+    primaryButton: {
+        width: '100%',
+        height: '60px',
+        backgroundColor: '#F7C35F',
+        color: '#000000',
+        border: 'none',
+        borderRadius: '10px',
+        fontSize: '17px',
+        fontWeight: '600',
+        cursor: 'pointer',
+        fontFamily: 'Inter',
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+        transition: 'all 0.2s ease',
+        '&:hover': {
+            backgroundColor: '#f5b94a'
+        }
+    },
+    paymentStep: {
+        marginTop: '16px'
+    },
+    secureBadge: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '8px',
+        color: '#666',
+        fontSize: '14px',
+        marginBottom: '12px'
+    },
+    supportContact: {
+        textAlign: 'center',
+        marginTop: '16px',
+        fontSize: '14px',
+        color: '#666',
+        '& a': {
+            color: '#F7C35F',
+            textDecoration: 'none',
+            fontWeight: '500',
+            '&:hover': {
+                textDecoration: 'underline'
+            }
+        }
+    },
+    scheduleStep: {
+        padding: '32px',
+        backgroundColor: 'white',
+        borderRadius: '20px',
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
+        fontFamily: 'Be Vietnam Pro',
+        position: 'relative',
+        overflow: 'hidden'
+    },
+    stepTitle: {
+        fontSize: '24px',
+        fontWeight: '600',
+        color: '#333',
+        marginBottom: '16px'
+    },
+    appointmentDetails: {
+        padding: '16px',
+        backgroundColor: '#f8f8f8',
+        borderRadius: '12px',
+        marginBottom: '24px'
+    },
+    detailItem: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '8px'
+    },
+    scheduleActions: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: '12px'
+    },
+    backButton: {
+        width: '100%',
+        height: '60px',
+        backgroundColor: '#F5F5F5',
+        color: '#333',
+        border: 'none',
+        borderRadius: '10px',
+        fontSize: '17px',
+        fontWeight: '600',
+        cursor: 'pointer',
+        fontFamily: 'Inter',
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+        transition: 'all 0.2s ease',
+        '&:hover': {
+            backgroundColor: '#e9e9e9'
+        }
+    },
+    appointmentConfirmed: {
+        fontSize: '18px',
+        fontWeight: '600',
+        color: '#34C759',
+        marginBottom: '16px'
+    },
+    checkmark: {
+        fontSize: '24px',
+        marginRight: '8px'
+    },
+    paymentIntro: {
+        fontSize: '16px',
+        color: '#666',
+        marginBottom: '16px'
+    },
+    paymentNote: {
+        fontSize: '14px',
+        color: '#666',
+        marginTop: '16px'
+    }
+};
+
+const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, handlePayment, formData }) => {
     const isRecurring = serviceType !== 'ONE_TIME'
+    const [currentStep, setCurrentStep] = React.useState('quote') // 'quote' | 'schedule' | 'payment'
+    const [appointmentConfirmed, setAppointmentConfirmed] = React.useState(false)
     
     const getServiceBadge = () => {
         switch(serviceType) {
@@ -96,166 +277,137 @@ const PriceDisplay = ({ price, serviceType, originalPrice, isProcessingPayment, 
         }
     }
 
-    const getComparisonHint = () => {
-        switch(serviceType) {
-            case 'ONE_TIME':
-                return { text: 'Switch to weekly and save 20%', color: '#34C759' }
-            case 'MONTHLY':
-                return { text: 'Switch to bi-weekly and save 10%', color: '#34C759' }
-            default:
-                return null
-        }
+    const handleScheduleClick = () => {
+        setCurrentStep('schedule')
     }
 
-    const badge = getServiceBadge()
-    const hint = getComparisonHint()
+    const handleConfirmSchedule = () => {
+        setAppointmentConfirmed(true)
+        setCurrentStep('payment')
+    }
+
+    const renderScheduleStep = () => (
+        <div className="schedule-step" style={priceDisplayStyles.scheduleStep}>
+            <h3 style={priceDisplayStyles.stepTitle}>Confirm Your Service Details</h3>
+            
+            <div className="appointment-details" style={priceDisplayStyles.appointmentDetails}>
+                <div className="detail-item" style={priceDisplayStyles.detailItem}>
+                    <span>Service Type:</span>
+                    <strong>{SERVICES[serviceType].name}</strong>
+                </div>
+                <div className="detail-item" style={priceDisplayStyles.detailItem}>
+                    <span>First Service Date:</span>
+                    <strong>{formData.startDate || 'Not selected'}</strong>
+                </div>
+                <div className="detail-item" style={priceDisplayStyles.detailItem}>
+                    <span>Location:</span>
+                    <strong>{formData.address}</strong>
+                </div>
+                <div className="detail-item" style={priceDisplayStyles.detailItem}>
+                    <span>Total Price:</span>
+                    <strong>${price}</strong>
+                </div>
+            </div>
+
+            <div style={priceDisplayStyles.scheduleActions}>
+                <button
+                    onClick={() => setCurrentStep('quote')}
+                    style={priceDisplayStyles.backButton}
+                >
+                    ← Back
+                </button>
+                <button
+                    onClick={handleConfirmSchedule}
+                    style={priceDisplayStyles.primaryButton}
+                >
+                    Confirm Schedule
+                </button>
+            </div>
+        </div>
+    )
+
+    const renderPaymentStep = () => (
+        <div className="payment-step" style={priceDisplayStyles.paymentStep}>
+            <div style={priceDisplayStyles.appointmentConfirmed}>
+                <span style={priceDisplayStyles.checkmark}>✓</span>
+                Appointment Scheduled!
+            </div>
+            
+            <div style={priceDisplayStyles.paymentIntro}>
+                Last step: Add a payment method to secure your booking
+            </div>
+
+            <div className="secure-badge" style={priceDisplayStyles.secureBadge}>
+                🔒 Secure payment powered by Stripe
+            </div>
+            
+            <button
+                className="payment-button"
+                onClick={handlePayment}
+                disabled={isProcessingPayment}
+                style={priceDisplayStyles.primaryButton}
+            >
+                {isProcessingPayment ? 'Processing...' : 'Add Payment Method'}
+            </button>
+
+            <div style={priceDisplayStyles.paymentNote}>
+                Remember: You'll only be charged after the service is completed
+            </div>
+        </div>
+    )
 
     return (
-        <div style={{
-            padding: '32px',
-            backgroundColor: 'white',
-            borderRadius: '20px',
-            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
-            fontFamily: 'Be Vietnam Pro',
-            marginBottom: '16px',
-            position: 'relative',
-            overflow: 'hidden'
-        }}>
-            {badge && (
-                <div style={{ 
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    backgroundColor: badge.color,
-                    color: 'white',
-                    padding: '6px 30px',
-                    fontSize: '13px',
-                    fontFamily: 'Be Vietnam Pro',
-                    transform: 'rotate(0deg)',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                    zIndex: 1,
-                    textAlign: 'center',
-                    fontWeight: '500',
-                    borderTopLeftRadius: '20px',
-                    borderBottomRightRadius: '12px'
-                }}>
-                    {badge.text}
-                </div>
-            )}
-            
-            <div style={{ 
-                marginBottom: '24px',
-                textAlign: 'center',
-                position: 'relative',
-                zIndex: 2,
-                marginTop: '32px'
-            }}>
-                {isRecurring ? (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-                        {(serviceType === 'WEEKLY' || serviceType === 'BI_WEEKLY') && (
-                            <span style={{ textDecoration: 'line-through', color: '#666', fontSize: '24px', fontFamily: 'Be Vietnam Pro' }}>${originalPrice}</span>
-                        )}
-                        <span style={{ fontSize: '36px', fontWeight: '600', color: '#333', fontFamily: 'Be Vietnam Pro' }}>${price}</span>
-                        {(serviceType === 'WEEKLY' || serviceType === 'BI_WEEKLY') && (
-                            <span style={{ 
-                                backgroundColor: '#34C759', 
-                                color: 'white', 
-                                padding: '4px 8px', 
-                                borderRadius: '6px', 
-                                fontSize: '14px',
-                                fontFamily: 'Be Vietnam Pro',
-                            }}>
-                                Save {serviceType === 'WEEKLY' ? '20%' : '10%'}
+        <div className="price-display-container" style={priceDisplayStyles.container}>
+            {/* Service Badge */}
+            <div className="popular-badge" style={priceDisplayStyles.popularBadge}>Most Popular</div>
+
+            {currentStep === 'quote' && (
+                <>
+                    {/* Price Display */}
+                    <div className="price-section" style={priceDisplayStyles.priceSection}>
+                        {originalPrice && <span className="original-price" style={priceDisplayStyles.originalPrice}>${originalPrice}</span>}
+                        <span className="current-price" style={priceDisplayStyles.currentPrice}>${price}</span>
+                        {SERVICES[serviceType].discount > 0 && (
+                            <span className="savings-badge" style={priceDisplayStyles.savingsBadge}>
+                                Save {SERVICES[serviceType].discount * 100}%
                             </span>
                         )}
                     </div>
-                ) : (
-                    <div style={{ fontSize: '36px', fontWeight: '600', color: '#333', fontFamily: 'Be Vietnam Pro' }}>
-                        ${price}
-                    </div>
-                )}
-            </div>
 
-            {(serviceType === 'MONTHLY' || serviceType === 'ONE_TIME') && (
-                <div style={{ 
-                    fontSize: '14px', 
-                    color: '#34C759', 
-                    textAlign: 'center',
-                    fontWeight: '500',
-                    marginBottom: '24px',
-                    fontFamily: 'Be Vietnam Pro',
-                }}>
-                    {serviceType === 'MONTHLY' 
-                        ? 'Switch to bi-weekly and save 10%'
-                        : 'Switch to weekly and save 20%'
-                    }
-                </div>
+                    {/* Services List */}
+                    <div style={priceDisplayStyles.servicesList}>
+                        <div style={priceDisplayStyles.serviceItem}>
+                            <span style={priceDisplayStyles.checkmark}>✓</span>
+                            Professional mowing
+                        </div>
+                        <div style={priceDisplayStyles.serviceItem}>
+                            <span style={priceDisplayStyles.checkmark}>✓</span>
+                            Edge trimming
+                        </div>
+                        <div style={priceDisplayStyles.serviceItem}>
+                            <span style={priceDisplayStyles.checkmark}>✓</span>
+                            Grass clippings cleanup
+                        </div>
+                    </div>
+
+                    {/* Payment Button */}
+                    <button
+                        onClick={handlePayment}
+                        style={priceDisplayStyles.primaryButton}
+                    >
+                        Add Payment Method
+                    </button>
+
+                    {/* Payment Note */}
+                    <div style={priceDisplayStyles.paymentNote}>
+                        You will only be charged after the service is completed
+                    </div>
+                </>
             )}
 
-            <div style={{ 
-                fontSize: '14px', 
-                color: '#666', 
-                textAlign: 'left',
-                marginBottom: '24px',
-                backgroundColor: '#f8f8f8',
-                padding: '16px',
-                borderRadius: '12px',
-                fontFamily: 'Be Vietnam Pro',
-            }}>
-                <div style={{ marginBottom: '8px', fontWeight: '500', color: '#333' }}>Service includes:</div>
-                <div style={{ marginBottom: '8px' }}>✓ Professional mowing</div>
-                <div style={{ marginBottom: '8px' }}>✓ Edge trimming</div>
-                <div style={{ marginBottom: '8px' }}>✓ Grass clippings cleanup</div>
-            </div>
-
-            <div style={{ 
-                fontSize: '14px', 
-                color: '#666', 
-                textAlign: 'center',
-                marginBottom: '24px',
-                fontFamily: 'Be Vietnam Pro',
-                fontStyle: 'italic'
-            }}>
-                You will only be charged after the service is completed
-            </div>
-
-            <button
-                className="add-payment-button"
-                onClick={handlePayment}
-                disabled={isProcessingPayment}
-                style={{
-                    width: '100%',
-                    height: '60px',
-                    backgroundColor: '#F7C35F',
-                    color: '#000000',
-                    border: 'none',
-                    borderRadius: '10px',
-                    fontSize: '17px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    fontFamily: 'Inter',
-                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                    transition: 'all 0.2s ease',
-                }}
-            >
-                {isProcessingPayment ? "Setting up payment..." : "Add Payment Method"}
-            </button>
-            <div style={{ 
-                textAlign: 'center', 
-                marginTop: '12px', 
-                fontSize: '14px', 
-                color: '#666',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
-                fontFamily: 'Be Vietnam Pro',
-            }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                    <path d="M7 11V7a5 5 0 0110 0v4"/>
-                </svg>
-                Secure payment powered by Stripe
+            {/* Contact Support */}
+            <div className="support-contact" style={priceDisplayStyles.supportContact}>
+                Questions? We're here! <a href="tel:+14075452322">+1 407 545 2322</a>
             </div>
         </div>
     )
@@ -317,6 +469,37 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 setPaymentError('Failed to load payment configuration');
             });
     }, []);
+
+    React.useEffect(() => {
+        // Save form data whenever it changes
+        if (formData.price && formData.service && formData.address) {
+            localStorage.setItem('lawnPeakQuoteData', JSON.stringify({
+                service: formData.service,
+                startDate: formData.startDate,
+                address: formData.address,
+                price: formData.price,
+                lotSize: formData.lotSize
+            }));
+        }
+    }, [formData]);
+
+    React.useEffect(() => {
+        // Send data to Framer immediately when address, service, or date changes
+        if (formData.address && formData.service && formData.startDate) {
+            if (window.parent) {
+                // @ts-ignore - Framer Data API
+                window.Data = window.Data || {};
+                // @ts-ignore - Framer Data API
+                window.Data.quoteData = {
+                    service: formData.service,
+                    startDate: formData.startDate,
+                    address: formData.address,
+                    price: formData.price,
+                    lotSize: formData.lotSize
+                };
+            }
+        }
+    }, [formData.address, formData.service, formData.startDate, formData.price]);
 
     const formatDateForDisplay = (date) => {
         const month = date.toLocaleString('en-US', { month: 'short' });
@@ -620,6 +803,72 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 ))}
             </select>
 
+            {formData.lotSize && formData.service && (
+                <div className="date-input-container">
+                    <div
+                        className="date-input"
+                        onClick={() => setShowCalendar(!showCalendar)}
+                    >
+                        <span>{selectedDate ? formatDateForDisplay(selectedDate) : "Select preferred start date"}</span>
+                        <span className="calendar-icon">📅</span>
+                    </div>
+                    {showCalendar && (
+                        <div className="calendar-dropdown">
+                            <div className="calendar-header">
+                                <button onClick={() => {
+                                    const newDate = new Date(selectedDate);
+                                    newDate.setMonth(newDate.getMonth() - 1);
+                                    setSelectedDate(newDate);
+                                }} className="nav-button">←</button>
+                                <div>
+                                    {selectedDate.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
+                                </div>
+                                <button onClick={() => {
+                                    const newDate = new Date(selectedDate);
+                                    newDate.setMonth(newDate.getMonth() + 1);
+                                    setSelectedDate(newDate);
+                                }} className="nav-button">→</button>
+                            </div>
+                            <div className="calendar-weekdays">
+                                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                                    <div key={day} className="weekday">{day}</div>
+                                ))}
+                            </div>
+                            <div className="calendar-days">
+                                {Array.from({ length: new Date(
+                                    selectedDate.getFullYear(),
+                                    selectedDate.getMonth() + 1,
+                                    0
+                                ).getDate() }, (_, i) => i + 1).map(day => {
+                                    const date = new Date(
+                                        selectedDate.getFullYear(),
+                                        selectedDate.getMonth(),
+                                        day
+                                    );
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    const isPast = date < today;
+                                    const isSelected = 
+                                        day === selectedDate.getDate() &&
+                                        selectedDate.getMonth() === date.getMonth() &&
+                                        selectedDate.getFullYear() === date.getFullYear();
+
+                                    return (
+                                        <div
+                                            key={day}
+                                            className={`calendar-day ${isPast ? 'past' : ''} ${isSelected ? 'selected' : ''}`}
+                                            onClick={() => !isPast && handleDateSelect(day)}
+                                        >
+                                            {day}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
             <input
                 type="tel"
                 value={formData.phone}
@@ -627,6 +876,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                 placeholder="Phone number"
                 style={inputStyle}
             />
+            
             {isLoading ? (
                 <div style={{
                     textAlign: "center",
@@ -641,6 +891,7 @@ function QuoteCalculator({ onPriceChange, onServiceChange }) {
                     originalPrice={calculatePrice(formData.lotSize, 'ONE_TIME')} 
                     isProcessingPayment={isProcessingPayment}
                     handlePayment={handlePayment}
+                    formData={formData}
                 />
             )}
 

@@ -11,15 +11,13 @@ export function NameInput() {
         
         const params = new URLSearchParams(window.location.search)
         const setupStatus = params.get('setup')
-        const customerId = params.get('customer_id')
         
         console.log('NameInput: Checking URL parameters:', {
             setupStatus,
-            customerId,
             currentUrl: window.location.href
         })
         
-        if (setupStatus === 'success' && customerId) {
+        if (setupStatus === 'success') {
             console.log('NameInput: Payment success detected')
             setShowThankYou(true)
             setShowCanceled(false)
@@ -27,7 +25,7 @@ export function NameInput() {
             // Auto-hide after 10 seconds
             const timer = setTimeout(() => {
                 setShowThankYou(false)
-                // Clean up URL parameters
+                // Use Framer's navigation if available
                 if (window.history && window.history.replaceState) {
                     window.history.replaceState({}, '', window.location.pathname)
                 }
