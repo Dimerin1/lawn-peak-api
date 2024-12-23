@@ -544,7 +544,7 @@ function AdminDashboard() {
                                                     </TableCell>
                                                     <TableCell align="right">
                                                         <Typography variant="body2">
-                                                            ${parseFloat(customer.metadata.price).toFixed(2)}
+                                                            {(parseFloat(customer.metadata.price) / 100).toFixed(2)}
                                                         </Typography>
                                                         {customer.metadata.charge_date && (
                                                             <Typography variant="caption" color="textSecondary">
@@ -554,51 +554,50 @@ function AdminDashboard() {
                                                     </TableCell>
                                                     <TableCell>
                                                         {customer.has_payment_method ? (
-                                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'success.main' }}>
-                                                                <PaymentIcon />
-                                                                <Typography variant="body2">Card Added</Typography>
-                                                            </Box>
+                                                            <Stack direction="row" spacing={1}>
+                                                                <Button
+                                                                    variant="contained"
+                                                                    color="primary"
+                                                                    size="small"
+                                                                    startIcon={<PaymentIcon />}
+                                                                    onClick={() => handleChargeCustomer(customer.id, parseFloat(customer.metadata.price) / 100)}
+                                                                    disabled={chargingCustomerId === customer.id}
+                                                                >
+                                                                    {chargingCustomerId === customer.id ? (
+                                                                        <CircularProgress size={20} color="inherit" />
+                                                                    ) : (
+                                                                        'Charge'
+                                                                    )}
+                                                                </Button>
+                                                                <IconButton
+                                                                    size="small"
+                                                                    onClick={() => {
+                                                                        setEditDialog({
+                                                                            open: true,
+                                                                            customer,
+                                                                            newServiceType: customer.metadata.service_type,
+                                                                            newPrice: (parseFloat(customer.metadata.price) / 100).toString()
+                                                                        })
+                                                                    }}
+                                                                >
+                                                                    <EditIcon />
+                                                                </IconButton>
+                                                                <IconButton
+                                                                    size="small"
+                                                                    onClick={() => {
+                                                                        setCustomerToDelete(customer)
+                                                                        setDeleteDialogOpen(true)
+                                                                    }}
+                                                                >
+                                                                    <DeleteIcon />
+                                                                </IconButton>
+                                                            </Stack>
                                                         ) : (
-                                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
-                                                                <Typography variant="body2">No Payment Method</Typography>
-                                                            </Box>
+                                                            <Typography variant="caption" color="error">
+                                                                No payment method
+                                                            </Typography>
                                                         )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Stack direction="row" spacing={1}>
-                                                            <IconButton
-                                                                color="primary"
-                                                                onClick={() => {
-                                                                    setEditDialog({
-                                                                        open: true,
-                                                                        customer,
-                                                                        newServiceType: customer.metadata.service_type,
-                                                                        newPrice: customer.metadata.price
-                                                                    })
-                                                                }}
-                                                            >
-                                                                <EditIcon />
-                                                            </IconButton>
-                                                            <IconButton
-                                                                color="error"
-                                                                onClick={() => {
-                                                                    setCustomerToDelete(customer)
-                                                                    setDeleteDialogOpen(true)
-                                                                }}
-                                                            >
-                                                                <DeleteIcon />
-                                                            </IconButton>
-                                                            <IconButton
-                                                                color="success"
-                                                                disabled={chargingCustomerId === customer.id}
-                                                                onClick={() => handleChargeCustomer(
-                                                                    customer.id,
-                                                                    parseFloat(customer.metadata.price)
-                                                                )}
-                                                            >
-                                                                <PaymentIcon />
-                                                            </IconButton>
-                                                        </Stack>
+
                                                     </TableCell>
                                                 </TableRow>
                                             ))
