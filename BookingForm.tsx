@@ -18,19 +18,25 @@ const LOT_SIZES = {
 
 const loadGoogleMapsScript = () => {
     return new Promise((resolve, reject) => {
-        if (window.google?.maps?.places) {
-            resolve(window.google.maps);
-            return;
+        if (typeof window !== 'undefined' && window.google?.maps?.places) {
+            resolve()
+            return
         }
 
-        const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`;
-        script.async = true;
-        script.defer = true;
-        script.onload = () => resolve(window.google.maps);
-        script.onerror = (error) => reject(error);
-        document.head.appendChild(script);
-    });
+        const script = document.createElement('script')
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`
+        script.async = true
+        script.defer = true
+        script.onload = () => {
+            if (window.google?.maps?.places) {
+                resolve()
+            } else {
+                reject(new Error('Google Maps Places API not loaded'))
+            }
+        }
+        script.onerror = () => reject(new Error('Failed to load Google Maps script'))
+        document.head.appendChild(script)
+    })
 };
 
 const calculatePrice = (lotSize, service) => {
@@ -762,6 +768,22 @@ const ConfirmationDetails = ({ formData, loading, handlePayment }) => {
 export default function BookingForm() {
     // Form state
     const [step, setStep] = React.useState(1)
+    const [mapsLoaded, setMapsLoaded] = React.useState(false)
+    const [mapsError, setMapsError] = React.useState(null)
+
+    React.useEffect(() => {
+        const loadMaps = async () => {
+            try {
+                await loadGoogleMapsScript()
+                setMapsLoaded(true)
+            } catch (err) {
+                console.error('Error loading Google Maps:', err)
+                setMapsError('Error loading address autocomplete')
+            }
+        }
+        loadMaps()
+    }, [])
+
     const [formData, setFormData] = React.useState(() => {
         // Get tomorrow's date
         const tomorrow = new Date();
