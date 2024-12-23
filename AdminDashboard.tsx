@@ -92,14 +92,17 @@ function AdminDashboard() {
     const [snackbar, setSnackbar] = React.useState({ open: false, message: '', severity: 'success' as 'success' | 'error' })
 
     // API configuration
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://lawn-peak-api.onrender.com";
 
     // Axios configuration with CORS headers
     const axiosConfig = {
         headers: {
-            'Content-Type': 'application/json'
-        }
-    }
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        mode: 'cors',
+        credentials: 'omit'
+    };
 
     // Simple authentication
     const handleLogin = async (e: React.FormEvent) => {
@@ -502,18 +505,19 @@ function AdminDashboard() {
                                                 </Button>
                                             </TableCell>
                                             <TableCell>Actions</TableCell>
+                                            <TableCell>Charge</TableCell>
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
                                         {loading ? (
                                             <TableRow>
-                                                <TableCell colSpan={5} align="center">
+                                                <TableCell colSpan={6} align="center">
                                                     <CircularProgress />
                                                 </TableCell>
                                             </TableRow>
                                         ) : filteredCustomers.length === 0 ? (
                                             <TableRow>
-                                                <TableCell colSpan={5} align="center">
+                                                <TableCell colSpan={6} align="center">
                                                     No customers found
                                                 </TableCell>
                                             </TableRow>
@@ -598,6 +602,17 @@ function AdminDashboard() {
                                                             </Typography>
                                                         )}
 
+                                                    </TableCell>
+                                                    <TableCell align="right">
+                                                        <Button
+                                                            variant="contained"
+                                                            color="primary"
+                                                            disabled={chargingCustomerId === customer.id || customer.metadata?.charge_date}
+                                                            onClick={() => handleChargeCustomer(customer.id, customer.metadata?.price)}
+                                                        >
+                                                            {chargingCustomerId === customer.id ? 'Charging...' : 
+                                                             customer.metadata?.charge_date ? 'Charged' : 'Charge Customer'}
+                                                        </Button>
                                                     </TableCell>
                                                 </TableRow>
                                             ))
