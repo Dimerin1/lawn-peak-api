@@ -369,15 +369,17 @@ def create_payment_intent():
 
 @app.route('/create-setup-intent', methods=['POST', 'OPTIONS'])
 def create_setup_intent():
-    if request.method == 'OPTIONS':
-        return '', 204
+    if request.method == "OPTIONS":
+        response = make_response()
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
+        response.headers.add("Access-Control-Allow-Methods", "POST")
+        return response
 
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-
+        data = request.json
         required_fields = ['price', 'service_type', 'address', 'lot_size', 'phone']
+        
         for field in required_fields:
             if field not in data:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
@@ -386,22 +388,15 @@ def create_setup_intent():
         checkout_session = stripe.checkout.Session.create(
             payment_method_types=['card'],
             mode='setup',
-            customer_email=data.get('email'),
             success_url=data.get('success_url', request.host_url),
             cancel_url=data.get('cancel_url', request.host_url),
-            metadata={
-                'price': data['price'],
-                'service_type': data['service_type'],
-                'address': data['address'],
-                'lot_size': data['lot_size'],
-                'phone': data['phone']
-            }
+            metadata=data.get('metadata', {})  # Use metadata from request
         )
         
         return jsonify({'setupIntentUrl': checkout_session.url}), 200
 
     except Exception as e:
-        print(f"Error creating setup intent: {str(e)}")
+        logger.error(f"Error creating setup intent: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/webhook', methods=['POST'])
