@@ -783,12 +783,19 @@ def append_to_sheet_endpoint():
         logger.error(f"Error appending to sheet: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/config')
+@app.route('/config', methods=['GET', 'OPTIONS'])
 def get_config():
-    """Get Stripe publishable key"""
-    return jsonify({
-        'publishableKey': os.getenv('STRIPE_PUBLISHABLE_KEY', 'pk_live_MFIjF2jscJwoZyTiM9iq3XFL00lrHwBGaP')
-    })
+    if request.method == "OPTIONS":
+        response = make_response()
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
+        response.headers.add("Access-Control-Allow-Methods", "GET")
+        return response
+
+    stripe_config = {
+        'publishableKey': os.getenv('STRIPE_PUBLISHABLE_KEY')
+    }
+    return jsonify(stripe_config)
 
 @app.route('/delete-customer/<customer_id>', methods=['DELETE', 'OPTIONS'])
 def delete_customer(customer_id):

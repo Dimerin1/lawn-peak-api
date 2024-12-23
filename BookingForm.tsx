@@ -835,6 +835,7 @@ const PriceDisplay = ({ price, serviceType, originalPrice }) => {
 export default function BookingForm() {
     // Form state
     const [step, setStep] = React.useState(1)
+    const [stripeConfig, setStripeConfig] = React.useState(null)
     const [formData, setFormData] = React.useState(() => {
         // Get tomorrow's date
         const tomorrow = new Date()
@@ -859,6 +860,35 @@ export default function BookingForm() {
         }
     })
 
+    // Fetch Stripe config on mount
+    React.useEffect(() => {
+        const getConfig = async () => {
+            try {
+                const apiBaseUrl =
+                    process.env.NEXT_PUBLIC_API_URL ||
+                    "https://lawn-peak-api.onrender.com"
+                const response = await fetch(`${apiBaseUrl}/config`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                })
+                
+                if (!response.ok) {
+                    throw new Error('Failed to fetch Stripe configuration')
+                }
+                
+                const { publishableKey } = await response.json()
+                setStripeConfig({ publishableKey })
+            } catch (error) {
+                console.error('Error loading Stripe config:', error)
+                setError('Failed to load payment configuration')
+            }
+        }
+        
+        getConfig()
+    }, [])
+
     // UI state
     const [loading, setLoading] = React.useState(false)
     const [error, setError] = React.useState("")
@@ -870,7 +900,6 @@ export default function BookingForm() {
     const [showCalendar, setShowCalendar] = React.useState(false)
     const [showThankYou, setShowThankYou] = React.useState(false)
     const [showCanceled, setShowCanceled] = React.useState(false)
-    const [stripePublishableKey, setStripePublishableKey] = React.useState('')
 
     // Fetch Stripe publishable key
     React.useEffect(() => {
