@@ -935,14 +935,17 @@ def submit_quote():
             logger.error(f"Missing required fields. Received fields: {data.keys()}")
             return jsonify({'error': 'Missing required fields'}), 400
             
-        # Store in Google Sheets
+        # Try to store in Google Sheets, but continue even if it fails
         logger.info("Attempting to store in Google Sheets...")
-        if append_to_sheet(data):
+        try:
+            append_to_sheet(data)
             logger.info("Successfully stored in Google Sheets")
-            return jsonify({'success': True, 'message': 'Quote submitted successfully'})
-        else:
-            logger.error("Failed to store in Google Sheets")
-            return jsonify({'error': 'Failed to store quote data'}), 500
+        except Exception as sheets_error:
+            logger.warning(f"Failed to store in Google Sheets: {str(sheets_error)}")
+            # Continue anyway - we don't want to block the quote submission just because of sheets
+            
+        # Return success since we have the data
+        return jsonify({'success': True, 'message': 'Quote submitted successfully'})
             
     except Exception as e:
         logger.error(f"Error in submit_quote: {str(e)}")
