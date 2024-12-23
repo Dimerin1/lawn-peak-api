@@ -49,38 +49,27 @@ try:
 except Exception as e:
     logger.error(f"Failed to load Google credentials: {str(e)}")
 
-# Create Flask app
+# Create Flask app with CORS
 app = Flask(__name__)
-
-# Configure CORS
-ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:5173',
-    'https://lawnpeak.com',
-    'https://lawn-peak-front.onrender.com',
-    'https://lawn-peak-api.onrender.com',
-    'https://fabulous-screenshot-716470.framer.app'  
-]
-
 CORS(app, resources={
     r"/*": {
-        "origins": ALLOWED_ORIGINS,
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"],
-        "expose_headers": ["Content-Type"],
-        "supports_credentials": False,
-        "max_age": 3600
+        "origins": [
+            "http://localhost:3000",
+            "https://lawn-peak-front.onrender.com",
+            "https://lawn-peak-api.onrender.com"
+        ],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "Accept"]
     }
 })
 
 @app.after_request
 def after_request(response):
     origin = request.headers.get('Origin')
-    if origin in ALLOWED_ORIGINS:
+    if origin in ["http://localhost:3000", "https://lawn-peak-front.onrender.com", "https://lawn-peak-api.onrender.com"]:
         response.headers['Access-Control-Allow-Origin'] = origin
-    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Accept'
     response.headers['Access-Control-Max-Age'] = '3600'
     return response
 
@@ -369,7 +358,7 @@ def create_payment_intent():
 
         return jsonify({
             'clientSecret': intent.client_secret,
-            'publishableKey': os.getenv('STRIPE_PUBLISHABLE_KEY', 'pk_test_51ONqUHFIWJQKnfxXBSWTlcKRGpvhBWRtQnxQxBTqVPxAYF3IkXlPHbOJBHQIxULhsqOQRXhTPTz8F8UbNrE7KtGD00yrTDUQbR')
+            'publishableKey': os.getenv('STRIPE_PUBLISHABLE_KEY', 'pk_live_MFIjF2jscJwoZyTiM9iq3XFL00lrHwBGaP')
         })
 
     except stripe.error.StripeError as e:
@@ -803,7 +792,7 @@ def append_to_sheet_endpoint():
 def get_config():
     """Get Stripe publishable key"""
     return jsonify({
-        'publishableKey': os.getenv('STRIPE_PUBLISHABLE_KEY')
+        'publishableKey': os.getenv('STRIPE_PUBLISHABLE_KEY', 'pk_live_MFIjF2jscJwoZyTiM9iq3XFL00lrHwBGaP')
     })
 
 @app.route('/delete-customer/<customer_id>', methods=['DELETE', 'OPTIONS'])
