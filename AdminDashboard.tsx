@@ -138,25 +138,32 @@ function AdminDashboard() {
     // Fetch customers
     const fetchCustomers = async () => {
         if (!isAuthenticated) {
+            console.log('Not authenticated, skipping fetch')
             setLoading(false)
             return
         }
         
         try {
+            console.log('Fetching customers...')
             setLoading(true)
             setError(null)
             
             const response = await axios.get(`${API_BASE_URL}/list-customers`, axiosConfig)
+            console.log('Response from /list-customers:', response.data)
+            
             if (response.data.customers) {
+                console.log('Received customers:', response.data.customers)
                 setCustomers(response.data.customers)
                 setFilteredCustomers(response.data.customers)
             } else {
+                console.log('No customers in response:', response.data)
                 throw new Error('No customer data received')
             }
         } catch (err) {
             console.error('Error fetching customers:', err)
             setError(err instanceof Error ? err.message : 'Failed to fetch customers')
             if (axios.isAxiosError(err) && err.response?.status === 401) {
+                console.log('Unauthorized, logging out')
                 setIsAuthenticated(false)
                 localStorage.removeItem('adminAuth')
             }

@@ -46,6 +46,14 @@ try:
 
     if not GOOGLE_SERVICES_AVAILABLE:
         logger.warning("Google credentials file not found in any location")
+
+    # Check for Google Sheets ID
+    GOOGLE_SHEETS_ID = os.getenv('GOOGLE_SHEETS_ID')
+    if not GOOGLE_SHEETS_ID:
+        logger.error("GOOGLE_SHEETS_ID environment variable is not set")
+    else:
+        logger.info(f"Using Google Sheets ID: {GOOGLE_SHEETS_ID[:10]}...")
+
 except Exception as e:
     logger.error(f"Failed to load Google credentials: {str(e)}")
 
@@ -795,6 +803,67 @@ def append_to_sheet_endpoint():
         logger.error(f"Error appending to sheet: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+def append_to_sheet(data):
+    """
+    Append a row to the Google Sheet with the quote data.
+    """
+    try:
+        logger.info("=== START: Append to Sheet ===")
+        logger.info(f"Appending data: {data}")
+        
+        service = get_sheets_service()
+        if not service:
+            raise Exception("Failed to get Google Sheets service")
+
+        # Get current timestamp
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Format data for sheet
+        row = [
+            timestamp,  # Timestamp
+            data.get('name', 'Not provided'),  # Name
+            data.get('email', 'Not provided'),  # Email
+            data.get('phone', ''),  # Phone
+            data.get('address', ''),  # Address
+            data.get('lot_size', ''),  # Lot Size
+            data.get('service_type', ''),  # Service Type
+            str(data.get('price', 0)),  # Price
+            data.get('start_date', 'Not provided'),  # Start Date
+            data.get('payment_status', 'Pending'),  # Payment Status
+            data.get('charged_date', '')  # Charged Date
+        ]
+        
+        logger.info(f"Formatted row: {row}")
+        
+        # Get the spreadsheet ID from environment variable
+        SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID')
+        if not SPREADSHEET_ID:
+            raise Exception("GOOGLE_SHEETS_ID environment variable not set")
+            
+        logger.info(f"Using spreadsheet ID: {SPREADSHEET_ID}")
+        
+        # Append the row
+        result = service.spreadsheets().values().append(
+            spreadsheetId=SPREADSHEET_ID,
+            range='A:K',  # Append to columns A through K
+            valueInputOption='RAW',
+            insertDataOption='INSERT_ROWS',
+            body={
+                'values': [row]
+            }
+        ).execute()
+        
+        logger.info(f"Append result: {result}")
+        logger.info("=== END: Append to Sheet ===")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in append_to_sheet: {str(e)}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise
+
 @app.route('/config', methods=['GET', 'OPTIONS'])
 def get_config():
     if request.method == "OPTIONS":
@@ -924,7 +993,10 @@ def submit_quote():
         return '', 204
 
     try:
+        logger.info("=== START: Quote Submission ===")
+        logger.info(f"Headers: {dict(request.headers)}")
         logger.info("Received quote submission request")
+        
         data = request.json
         logger.info(f"Quote data received: {data}")
         
@@ -932,33 +1004,65 @@ def submit_quote():
         data['name'] = data.get('name', 'Not provided')
         data['email'] = data.get('email', 'Not provided')
         
-        required_fields = ['service_type', 'phone', 'address', 'lot_size', 'price']
+        # Map frontend field names to backend field names
+        mapped_data = {
+            'name': data.get('name', 'Not provided'),
+            'email': data.get('email', 'Not provided'),
+            'phone': data.get('phone', ''),
+            'address': data.get('address', ''),
+            'lot_size': data.get('lot_size', ''),
+            'service_type': data.get('service_type', ''),
+            'price': data.get('price', 0),
+            'start_date': data.get('start_date', 'Not provided'),
+            'payment_status': data.get('payment_status', 'Pending'),
+            'charged_date': data.get('charged_date', ''),
+            'submission_date': data.get('submission_date', datetime.datetime.now().isoformat())
+        }
         
-        if not all(field in data for field in required_fields):
-            logger.error(f"Missing required fields. Received fields: {data.keys()}")
-            return jsonify({'error': 'Missing required fields'}), 400
+        logger.info(f"Mapped data: {mapped_data}")
+        
+        required_fields = ['phone', 'address', 'lot_size', 'service_type', 'price']
+        missing_fields = [field for field in required_fields if not mapped_data.get(field)]
+        
+        if missing_fields:
+            logger.error(f"Missing required fields: {missing_fields}")
+            return jsonify({'error': f'Missing required fields: {missing_fields}'}), 400
             
-        # Try to store in Google Sheets, but continue even if it fails
+        # Try to store in Google Sheets
         logger.info("Attempting to store in Google Sheets...")
         try:
-            append_to_sheet(data)
+            logger.info("Getting sheets service...")
+            service = get_sheets_service()
+            logger.info("Got sheets service, appending data...")
+            append_to_sheet(mapped_data)
             logger.info("Successfully stored in Google Sheets")
         except Exception as sheets_error:
-            logger.warning(f"Failed to store in Google Sheets: {str(sheets_error)}")
+            logger.error(f"Failed to store in Google Sheets: {str(sheets_error)}")
+            # Log the full error traceback
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             # Continue anyway - we don't want to block the quote submission just because of sheets
             
+        logger.info("=== END: Quote Submission ===")
         # Return success since we have the data
         return jsonify({'success': True, 'message': 'Quote submitted successfully'})
             
     except Exception as e:
         logger.error(f"Error in submit_quote: {str(e)}")
+        # Log the full error traceback
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/list-customers', methods=['GET'])
 def list_customers():
     try:
+        logger.info("Received request to /list-customers")
+        
         # List all customers
+        logger.info("Fetching customers from Stripe...")
         customers = stripe.Customer.list(limit=100)
+        logger.info(f"Found {len(customers.data)} customers")
         
         # Format customer data
         formatted_customers = []
@@ -970,6 +1074,7 @@ def list_customers():
             )
             
             has_payment_method = len(payment_methods.data) > 0
+            logger.info(f"Customer {customer.id} has payment method: {has_payment_method}")
             
             # Get price from metadata and ensure it's a valid number
             price = customer.metadata.get('price', '0')
@@ -1005,7 +1110,8 @@ def list_customers():
                 'charged': metadata['charged'].lower() == 'true'
             }
             formatted_customers.append(customer_data)
-            
+        
+        logger.info(f"Returning {len(formatted_customers)} formatted customers")
         return jsonify({'customers': formatted_customers})
             
     except stripe.error.StripeError as e:
@@ -1085,181 +1191,6 @@ def get_sheets_service():
         "client_x509_cert_url": os.getenv('GOOGLE_SHEETS_CLIENT_X509_CERT_URL')
     })
     return build('sheets', 'v4', credentials=credentials)
-
-def append_to_sheet(data):
-    try:
-        logger.info("Creating Google Sheets service...")
-        service = get_sheets_service()
-        SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_ID', '19AqlhJ54zBXsED3J3vkY8_WolSnundLakNdfBAJdMXA')
-        logger.info(f"Using spreadsheet ID: {SPREADSHEET_ID}")
-        
-        # Format data for sheets
-        row = [
-            time.strftime('%Y-%m-%d %H:%M:%S'),  # Date
-            data.get('name', ''),
-            data.get('email', ''),
-            data.get('service_type', ''),
-            data.get('phone', ''),
-            data.get('address', ''),
-            data.get('lot_size', ''),
-            str(data.get('price', '')),
-            data.get('charge_date', '')
-        ]
-        
-        logger.info(f"Prepared row data: {row}")
-        
-        # First, get the current number of rows
-        result = service.spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range='A:I'
-        ).execute()
-        values = result.get('values', [])
-        current_row = len(values) + 1
-
-        # If this is the first row, add headers
-        if current_row == 1:
-            headers = [
-                'Timestamp',
-                'Customer Name',
-                'Email',
-                'Service Type',
-                'Phone Number',
-                'Address',
-                'Lot Size',
-                'Price ($)',
-                'Charged Date'
-            ]
-            body = {
-                'values': [headers]
-            }
-            service.spreadsheets().values().append(
-                spreadsheetId=SPREADSHEET_ID,
-                range='A1:I1',
-                valueInputOption='USER_ENTERED',
-                insertDataOption='INSERT_ROWS',
-                body=body
-            ).execute()
-            current_row = 2
-
-        # Append the new row
-        body = {
-            'values': [row]
-        }
-        service.spreadsheets().values().append(
-            spreadsheetId=SPREADSHEET_ID,
-            range='A:I',
-            valueInputOption='USER_ENTERED',
-            insertDataOption='INSERT_ROWS',
-            body=body
-        ).execute()
-
-        # Apply formatting
-        requests = [
-            # Format headers
-            {
-                "repeatCell": {
-                    "range": {
-                        "sheetId": 0,
-                        "startRowIndex": 0,
-                        "endRowIndex": 1,
-                        "startColumnIndex": 0,
-                        "endColumnIndex": 9
-                    },
-                    "cell": {
-                        "userEnteredFormat": {
-                            "backgroundColor": {
-                                "red": 0.2,
-                                "green": 0.5,
-                                "blue": 0.3
-                            },
-                            "textFormat": {
-                                "bold": True,
-                                "foregroundColor": {
-                                    "red": 1.0,
-                                    "green": 1.0,
-                                    "blue": 1.0
-                                }
-                            }
-                        }
-                    },
-                    "fields": "userEnteredFormat(backgroundColor,textFormat)"
-                }
-            },
-            # Add borders
-            {
-                "updateBorders": {
-                    "range": {
-                        "sheetId": 0,
-                        "startRowIndex": 0,
-                        "endRowIndex": current_row + 1,
-                        "startColumnIndex": 0,
-                        "endColumnIndex": 9
-                    },
-                    "top": {"style": "SOLID"},
-                    "bottom": {"style": "SOLID"},
-                    "left": {"style": "SOLID"},
-                    "right": {"style": "SOLID"},
-                    "innerHorizontal": {"style": "SOLID"},
-                    "innerVertical": {"style": "SOLID"}
-                }
-            },
-            # Auto-resize columns
-            {
-                "autoResizeDimensions": {
-                    "dimensions": {
-                        "sheetId": 0,
-                        "dimension": "COLUMNS",
-                        "startIndex": 0,
-                        "endIndex": 9
-                    }
-                }
-            },
-            # Format price column as currency
-            {
-                "repeatCell": {
-                    "range": {
-                        "sheetId": 0,
-                        "startRowIndex": 1,
-                        "endRowIndex": current_row + 1,
-                        "startColumnIndex": 7,
-                        "endColumnIndex": 8
-                    },
-                    "cell": {
-                        "userEnteredFormat": {
-                            "numberFormat": {
-                                "type": "CURRENCY",
-                                "pattern": "$#,##0.00"
-                            }
-                        }
-                    },
-                    "fields": "userEnteredFormat.numberFormat"
-                }
-            },
-            # Freeze header row
-            {
-                "updateSheetProperties": {
-                    "properties": {
-                        "sheetId": 0,
-                        "gridProperties": {
-                            "frozenRowCount": 1
-                        }
-                    },
-                    "fields": "gridProperties.frozenRowCount"
-                }
-            }
-        ]
-
-        # Apply all formatting
-        service.spreadsheets().batchUpdate(
-            spreadsheetId=SPREADSHEET_ID,
-            body={"requests": requests}
-        ).execute()
-
-        logger.info("Successfully formatted sheet")
-        return True
-    except Exception as e:
-        logger.error(f"Error appending to sheet: {str(e)}")
-        return False
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 8080))
