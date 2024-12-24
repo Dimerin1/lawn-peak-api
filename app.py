@@ -406,15 +406,34 @@ def create_setup_intent():
             if field not in data:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
 
-        # Create Stripe Checkout Session
+        logger.info("Creating customer in Stripe...")
+        # Create a customer first
+        customer = stripe.Customer.create(
+            email=data.get('metadata', {}).get('email'),
+            phone=data.get('phone'),
+            metadata={
+                'service_type': data.get('service_type'),
+                'payment_type': 'recurring',
+                'address': data.get('address'),
+                'lot_size': data.get('lot_size'),
+                'phone': data.get('phone'),
+                'price': str(data.get('price')),
+                'charged': 'false',
+                'charge_date': ''
+            }
+        )
+        logger.info(f"Created customer: {customer.id}")
+
+        # Create Stripe Checkout Session with the customer
         checkout_session = stripe.checkout.Session.create(
+            customer=customer.id,
             payment_method_types=['card'],
             mode='setup',
             success_url=data.get('success_url', request.host_url),
-            cancel_url=data.get('cancel_url', request.host_url),
-            metadata=data.get('metadata', {})  # Use metadata from request
+            cancel_url=data.get('cancel_url', request.host_url)
         )
         
+        logger.info(f"Created checkout session: {checkout_session.id}")
         return jsonify({'setupIntentUrl': checkout_session.url}), 200
 
     except Exception as e:
