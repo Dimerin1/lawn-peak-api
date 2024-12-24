@@ -58,20 +58,28 @@ CORS(app, resources={
             "https://lawn-peak-front.onrender.com",
             "https://lawn-peak-api.onrender.com",
             "https://lawn-peak-front.framer.website",
-            "https://lawnpeak.com"
+            "https://lawnpeak.com",
+            "https://js.stripe.com"
         ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "Accept"]
+        "allow_headers": ["Content-Type", "Authorization", "Accept", "Stripe-Version", "Stripe-Signature"]
     }
 })
 
 @app.after_request
 def after_request(response):
     origin = request.headers.get('Origin')
-    if origin in ["http://localhost:3000", "https://lawn-peak-front.onrender.com", "https://lawn-peak-api.onrender.com", "https://lawn-peak-front.framer.website", "https://lawnpeak.com"]:
+    if origin in [
+        "http://localhost:3000", 
+        "https://lawn-peak-front.onrender.com", 
+        "https://lawn-peak-api.onrender.com",
+        "https://lawn-peak-front.framer.website",
+        "https://lawnpeak.com",
+        "https://js.stripe.com"
+    ]:
         response.headers['Access-Control-Allow-Origin'] = origin
     response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Accept'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Accept,Stripe-Version,Stripe-Signature'
     response.headers['Access-Control-Max-Age'] = '3600'
     return response
 
