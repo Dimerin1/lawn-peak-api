@@ -93,22 +93,26 @@ function AdminDashboard() {
 
     // API configuration
     const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://lawn-peak-api.onrender.com";
+    console.log('API_BASE_URL:', API_BASE_URL);
 
     // Axios configuration with CORS headers
     const axiosConfig = {
         headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json'
-        }
+        },
+        withCredentials: true
     };
 
     // Simple authentication
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
         try {
+            console.log('Attempting login...')
             setLoading(true)
             setError(null)
             const response = await axios.post(`${API_BASE_URL}/admin-login`, { password }, axiosConfig)
+            console.log('Login response:', response.data)
             if (response.data.success) {
                 setIsAuthenticated(true)
                 localStorage.setItem('adminAuth', 'true')
@@ -116,6 +120,13 @@ function AdminDashboard() {
             }
         } catch (err) {
             console.error('Login error:', err)
+            if (axios.isAxiosError(err)) {
+                console.error('Login error details:', {
+                    message: err.message,
+                    response: err.response?.data,
+                    status: err.response?.status
+                })
+            }
             setError(err instanceof Error ? err.message : 'Login failed')
             setIsAuthenticated(false)
             localStorage.removeItem('adminAuth')

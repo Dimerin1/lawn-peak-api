@@ -1024,35 +1024,39 @@ export default function BookingForm() {
                 process.env.NEXT_PUBLIC_API_URL ||
                 "https://lawn-peak-api.onrender.com"
 
-            // First submit the quote data to Google Sheets
-            const quoteResponse = await fetch(`${apiBaseUrl}/submit-quote`, {
+            // First submit the quote data to Google Sheets asynchronously
+            const quoteData = {
+                name: formData.name || "Not provided",
+                email: formData.email || "Not provided",
+                phone: formData.phone,
+                address: formData.address,
+                lot_size: formData.lotSize,
+                service_type: formData.service,
+                price: formData.discountedPrice,
+                start_date: formData.startDate || "Not provided",
+                submission_date: new Date().toISOString(),
+                payment_status: "Pending",
+                charged_date: "",
+            }
+
+            console.log("Submitting quote data:", quoteData)
+
+            // Send quote data without waiting for response
+            fetch(`${apiBaseUrl}/submit-quote`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                     Accept: "application/json",
                 },
                 mode: "cors",
-                body: JSON.stringify({
-                    name: formData.name || "Not provided",
-                    email: formData.email || "Not provided",
-                    phone: formData.phone,
-                    address: formData.address,
-                    lot_size: formData.lotSize,
-                    service_type: formData.service,
-                    price: formData.discountedPrice, // Don't multiply by 100 for Google Sheets
-                    start_date: formData.startDate || "Not provided",
-                    submission_date: new Date().toISOString(),
-                    payment_status: "Pending",
-                    charged_date: "",
-                }),
-            })
+                credentials: "omit",
+                body: JSON.stringify(quoteData),
+            }).catch(error => {
+                console.error('Error submitting quote data:', error);
+                // Don't block the payment process if quote submission fails
+            });
 
-            if (!quoteResponse.ok) {
-                const errorText = await quoteResponse.text()
-                throw new Error(`Quote submission failed: ${errorText}`)
-            }
-
-            // Create setup intent for future payment
+            // Then create setup intent for future payment
             const setupResponse = await fetch(
                 `${apiBaseUrl}/create-setup-intent`,
                 {
@@ -1062,6 +1066,7 @@ export default function BookingForm() {
                         Accept: "application/json",
                     },
                     mode: "cors",
+                    credentials: "omit",
                     body: JSON.stringify({
                         price: Math.round(formData.discountedPrice * 100), // Keep *100 for Stripe (cents)
                         service_type: formData.service,
@@ -1075,7 +1080,7 @@ export default function BookingForm() {
                             email: formData.email,
                             start_date: formData.startDate,
                             submission_date: new Date().toISOString(),
-                            price: formData.discountedPrice, // Store original price in dollars for charging
+                            price: formData.discountedPrice,
                             service_type: formData.service,
                             lot_size: formData.lotSize
                         },
@@ -1083,55 +1088,32 @@ export default function BookingForm() {
                 }
             )
 
+            const setupData = await setupResponse.json()
+            console.log("Setup intent response:", setupData)
+
             if (!setupResponse.ok) {
-                const errorText = await setupResponse.text()
-                throw new Error(`Setup intent failed: ${errorText}`)
+                throw new Error(`Setup intent failed: ${setupData.error || 'Unknown error'}`)
             }
 
-            const data = await setupResponse.json()
-
-            if (!data.setupIntentUrl) {
+            if (!setupData.setupIntentUrl) {
                 throw new Error("No setup URL returned from server")
             }
 
             // Save form data to localStorage before redirect
             localStorage.setItem(
                 "quoteFormData",
-                JSON.stringify({
-                    ...formData,
-                    timestamp: new Date().toISOString(),
-                })
+                JSON.stringify(formData)
             )
 
-            // Push event to dataLayer for Google Tag Manager
-            if (window.dataLayer) {
-                window.dataLayer.push({
-                    event: "payment_method_added",
-                    value: formData.discountedPrice,
-                    currency: "USD",
-                    service_type: formData.service,
-                    lot_size: formData.lotSize,
-                })
-            }
-
-            // Meta Pixel tracking
-            if (window.fbq) {
-                fbq("track", "InitiateCheckout", {
-                    value: formData.discountedPrice,
-                    currency: "USD",
-                    content_type: "service",
-                    content_name: formData.service,
-                })
-            }
-
-            // Redirect to Stripe Checkout
-            window.location.href = data.setupIntentUrl
+            // Redirect to Stripe
+            window.location.href = setupData.setupIntentUrl
         } catch (error) {
-            console.error("Payment setup error:", error)
+            console.error("Payment error:", error)
             setError(
-                error.message || "Failed to set up payment. Please try again."
+                error instanceof Error
+                    ? error.message
+                    : "An error occurred during payment setup"
             )
-        } finally {
             setLoading(false)
         }
     }
