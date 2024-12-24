@@ -57,7 +57,8 @@ CORS(app, resources={
             "http://localhost:3000",
             "https://lawn-peak-front.onrender.com",
             "https://lawn-peak-api.onrender.com",
-            "https://lawn-peak-front.framer.website"
+            "https://lawn-peak-front.framer.website",
+            "https://lawnpeak.com"
         ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization", "Accept"]
@@ -67,7 +68,7 @@ CORS(app, resources={
 @app.after_request
 def after_request(response):
     origin = request.headers.get('Origin')
-    if origin in ["http://localhost:3000", "https://lawn-peak-front.onrender.com", "https://lawn-peak-api.onrender.com", "https://lawn-peak-front.framer.website"]:
+    if origin in ["http://localhost:3000", "https://lawn-peak-front.onrender.com", "https://lawn-peak-api.onrender.com", "https://lawn-peak-front.framer.website", "https://lawnpeak.com"]:
         response.headers['Access-Control-Allow-Origin'] = origin
     response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Accept'
