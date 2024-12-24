@@ -1283,34 +1283,34 @@ function AddressInput({ value, onChange, onSelect, style, placeholder }) {
         let isMounted = true;
         
         const initAutocomplete = async () => {
+            if (!inputRef.current || autocompleteRef.current) return;
+            
             try {
                 setIsLoadingAddress(true);
                 await loadGoogleMapsScript();
 
                 if (!isMounted) return;
 
-                if (inputRef.current && !autocompleteRef.current) {
-                    const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
-                        componentRestrictions: { country: "us" },
-                        fields: ["formatted_address", "geometry"],
-                        types: ["address"]
-                    });
+                const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
+                    componentRestrictions: { country: "us" },
+                    fields: ["formatted_address", "geometry"],
+                    types: ["address"]
+                });
 
-                    autocomplete.addListener("place_changed", () => {
-                        const place = autocomplete.getPlace();
-                        if (place.formatted_address) {
-                            setSelectedAddress(place.formatted_address);
-                            onChange(place.formatted_address);
-                            onSelect(place.formatted_address);
-                            // Prevent browser autofill from overriding
-                            if (inputRef.current) {
-                                inputRef.current.value = place.formatted_address;
-                            }
+                autocomplete.addListener("place_changed", () => {
+                    const place = autocomplete.getPlace();
+                    if (place.formatted_address) {
+                        setSelectedAddress(place.formatted_address);
+                        onChange(place.formatted_address);
+                        onSelect(place.formatted_address);
+                        // Prevent browser autofill from overriding
+                        if (inputRef.current) {
+                            inputRef.current.value = place.formatted_address;
                         }
-                    });
+                    }
+                });
 
-                    autocompleteRef.current = autocomplete;
-                }
+                autocompleteRef.current = autocomplete;
             } catch (error) {
                 console.error("Error initializing autocomplete:", error);
                 if (isMounted) {
@@ -1331,7 +1331,7 @@ function AddressInput({ value, onChange, onSelect, style, placeholder }) {
                 window.google?.maps?.event?.clearInstanceListeners(autocompleteRef.current);
             }
         };
-    }, []);
+    }, [onChange, onSelect]);
 
     // Keep input value in sync with selectedAddress
     React.useEffect(() => {
@@ -1352,15 +1352,28 @@ function AddressInput({ value, onChange, onSelect, style, placeholder }) {
                         setSelectedAddress(value);
                         onChange(value);
                     }}
-                    placeholder={placeholder}
+                    placeholder={isLoadingAddress ? "Loading address search..." : (placeholder || "Enter your address...")}
                     disabled={isLoadingAddress}
                     autoComplete="off"
                     style={{
-                        ...inputStyle,
-                        "::placeholder": {
-                            color: "#999999",
-                            opacity: 1
-                        }
+                        width: "100%",
+                        height: "60px",
+                        padding: "12px 16px",
+                        fontSize: "16px",
+                        lineHeight: "1.2",
+                        fontFamily: "Be Vietnam Pro",
+                        fontWeight: "400",
+                        color: "#333333",
+                        backgroundColor: isLoadingAddress ? "#F8F8F8" : "#F5F5F5",
+                        border: "2px solid #F5F5F5",
+                        borderRadius: "12px",
+                        outline: "none",
+                        transition: "all 0.2s ease-in-out",
+                        ":focus": {
+                            border: "2px solid #4CAF50",
+                            backgroundColor: "#FFFFFF"
+                        },
+                        ...style
                     }}
                 />
                 {isLoadingAddress && (
@@ -1370,8 +1383,19 @@ function AddressInput({ value, onChange, onSelect, style, placeholder }) {
                         top: "50%",
                         transform: "translateY(-50%)",
                         color: "#718096",
-                        fontSize: "14px"
+                        fontSize: "14px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px"
                     }}>
+                        <div style={{
+                            width: "16px",
+                            height: "16px",
+                            border: "2px solid #718096",
+                            borderTopColor: "transparent",
+                            borderRadius: "50%",
+                            animation: "spin 1s linear infinite"
+                        }} />
                         Loading...
                     </div>
                 )}
@@ -1386,6 +1410,12 @@ function AddressInput({ value, onChange, onSelect, style, placeholder }) {
                     {addressError}
                 </div>
             )}
+            <style jsx>{`
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            `}</style>
         </div>
     );
 }

@@ -1,6 +1,35 @@
 import * as React from "react"
 import { motion, AnimatePresence } from "framer-motion"
 
+// Load Stripe script
+const loadStripeScript = () => {
+    return new Promise((resolve, reject) => {
+        if (window.Stripe) {
+            resolve(window.Stripe)
+            return
+        }
+
+        const script = document.createElement("script")
+        script.src = "https://js.stripe.com/v3/"
+        script.async = true
+
+        script.onload = () => {
+            if (window.Stripe) {
+                resolve(window.Stripe)
+            } else {
+                reject(new Error("Stripe.js failed to load"))
+            }
+        }
+
+        script.onerror = (error) => {
+            console.error("Error loading Stripe.js:", error)
+            reject(error)
+        }
+
+        document.head.appendChild(script)
+    })
+}
+
 // Service configuration
 const SERVICES = {
     ONE_TIME: { name: "One-time mowing", discount: 0 },
@@ -862,8 +891,12 @@ export default function BookingForm() {
 
     // Fetch Stripe publishable key
     React.useEffect(() => {
-        const fetchStripeKey = async () => {
+        const initializeStripe = async () => {
             try {
+                // First load Stripe.js
+                await loadStripeScript()
+
+                // Then fetch the publishable key
                 const apiBaseUrl =
                     process.env.NEXT_PUBLIC_API_URL ||
                     "https://lawn-peak-api.onrender.com"
@@ -872,6 +905,7 @@ export default function BookingForm() {
                     headers: {
                         'Content-Type': 'application/json',
                     },
+                    credentials: 'include'
                 })
                 
                 if (!response.ok) {
@@ -880,13 +914,16 @@ export default function BookingForm() {
                 
                 const data = await response.json()
                 setStripePublishableKey(data.publishableKey)
+
+                // Initialize Stripe with the key
+                window.Stripe(data.publishableKey)
             } catch (error) {
-                console.error('Error loading Stripe config:', error)
+                console.error('Error initializing Stripe:', error)
                 setError('Failed to load payment configuration')
             }
         }
         
-        fetchStripeKey()
+        initializeStripe()
     }, [])
 
     // UI state

@@ -62,7 +62,8 @@ CORS(app, resources={
             "https://js.stripe.com"
         ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "Accept", "Stripe-Version", "Stripe-Signature"]
+        "allow_headers": ["Content-Type", "Authorization", "Accept", "Stripe-Version", "Stripe-Signature"],
+        "supports_credentials": True
     }
 })
 
@@ -78,6 +79,7 @@ def after_request(response):
         "https://js.stripe.com"
     ]:
         response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
     response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Accept,Stripe-Version,Stripe-Signature'
     response.headers['Access-Control-Max-Age'] = '3600'
